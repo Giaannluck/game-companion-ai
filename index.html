@@ -376,7 +376,7 @@
     const vol = getVolume();
     volFill.style.width = Math.min(vol * 2, 100) + '%';
 
-    if (callActive && !isThinking) {
+    if (callActive && !isThinking && !pttActive) {
       if (vol > voiceThreshold) {
         voiceFrames++;
         silentFrames = 0;
@@ -555,18 +555,26 @@
 
   const pttStart = () => {
     if (!callActive || isThinking || pttActive) return;
+    // Cancelar cualquier audio que esté sonando
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     pttActive = true;
     pttBtn.classList.add('active');
     clearTimeout(silenceTimer); silenceTimer = null;
+    silentFrames = 0; voiceFrames = 0;
     isWaitingVoice = false;
     if (!isRecording) beginRecording();
+    setStatusBar('🔴 Grabando (PTT)...');
   };
 
   const pttStop = () => {
     if (!pttActive) return;
     pttActive = false;
     pttBtn.classList.remove('active');
-    if (isRecording) finishRecording();
+    if (isRecording) {
+      finishRecording();
+    } else {
+      resetToListening();
+    }
   };
 
   pttBtn.addEventListener('mousedown', pttStart);
@@ -577,10 +585,10 @@
 
   // Tecla { como push-to-talk
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Semicolon' && !e.repeat) { e.preventDefault(); pttStart(); }
+    if (e.code === 'F13' && !e.repeat) { e.preventDefault(); pttStart(); }
   });
   document.addEventListener('keyup', (e) => {
-    if (e.code === 'Semicolon') { e.preventDefault(); pttStop(); }
+    if (e.code === 'F13') { e.preventDefault(); pttStop(); }
   });
 
   function sendTextMessage() {
