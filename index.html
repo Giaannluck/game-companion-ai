@@ -163,9 +163,9 @@
   let micStream      = null;
   let voiceThreshold = 30;
 
-  const SILENCE_DELAY        = 1800;
-  const SILENT_FRAMES_NEEDED = 12;
-  const VOICE_FRAMES_NEEDED  = 5;
+  const SILENCE_DELAY        = 2500;  // más tiempo esperando que terminés de hablar
+const SILENT_FRAMES_NEEDED = 20;    // más frames de silencio antes de cortar
+const VOICE_FRAMES_NEEDED  = 3;     // arranca a grabar más rápido
   const CALIBRATION_MS       = 2000;
 
   // Screen
