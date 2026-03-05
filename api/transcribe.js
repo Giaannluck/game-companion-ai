@@ -11,11 +11,10 @@ export default async function handler(req, res) {
   const boundary = contentType.split('boundary=')[1];
   if (!boundary) return res.status(400).json({ error: 'No boundary' });
 
-  // Extraer el archivo del multipart
   const body = buffer.toString('binary');
   const parts = body.split('--' + boundary);
   let audioBuffer = null;
-  let filename = 'audio.webm';
+  let filename = 'audio.wav';
 
   for (const part of parts) {
     if (part.includes('Content-Disposition') && part.includes('filename')) {
@@ -33,11 +32,12 @@ export default async function handler(req, res) {
 
   try {
     const formData = new FormData();
-    const blob = new Blob([audioBuffer], { type: 'audio/webm' });
-    formData.append('file', blob, filename);
+    const blob = new Blob([audioBuffer], { type: 'audio/wav' });
+    formData.append('file', blob, 'audio.wav');
     formData.append('model', 'whisper-large-v3-turbo');
     formData.append('language', 'es');
     formData.append('response_format', 'json');
+    formData.append('prompt', 'Transcripción en español argentino de una conversación casual sobre videojuegos.');
 
     const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST',
