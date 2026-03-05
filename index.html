@@ -15,16 +15,17 @@
     }
     html,body{height:100%;background:var(--bg-deep);color:var(--text-main);font-family:'Crimson Pro',Georgia,serif;font-size:17px;line-height:1.6;overflow:hidden;}
     #app{display:flex;flex-direction:column;height:100vh;max-width:860px;margin:0 auto;}
-    header{display:flex;align-items:center;gap:14px;padding:18px 28px 14px;border-bottom:1px solid var(--border);}
-    .emblem{width:44px;height:44px;border:2px solid var(--gold-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;}
-    .header-text h1{font-family:'Cinzel',serif;font-size:15px;color:var(--gold-light);letter-spacing:2px;text-transform:uppercase;}
+    header{display:flex;align-items:center;gap:14px;padding:18px 28px 14px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0f0c08 0%,transparent 100%);flex-shrink:0;}
+    .emblem{width:44px;height:44px;border:2px solid var(--gold-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;background:radial-gradient(circle,#2a1f0f 0%,#0a0806 100%);box-shadow:0 0 12px rgba(201,151,42,0.15);flex-shrink:0;}
+    .header-text h1{font-family:'Cinzel',serif;font-size:15px;font-weight:600;color:var(--gold-light);letter-spacing:2px;text-transform:uppercase;}
     .header-text p{font-size:13px;color:var(--text-dim);font-style:italic;}
     .status-dot{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim);font-family:'Cinzel',serif;letter-spacing:1px;}
     .dot{width:8px;height:8px;border-radius:50%;background:#4a7a3a;box-shadow:0 0 6px #4a7a3a;animation:pulse 2.5s ease-in-out infinite;}
     .dot.thinking{background:var(--gold);box-shadow:0 0 6px var(--gold);animation:pulse-fast 0.8s ease-in-out infinite;}
+    .dot.recording{background:#e05050;box-shadow:0 0 6px #e05050;animation:pulse-fast 0.8s ease-in-out infinite;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
     @keyframes pulse-fast{0%,100%{opacity:1}50%{opacity:0.3}}
-    #context-bar{display:flex;align-items:center;gap:10px;padding:8px 28px;background:var(--bg-panel);border-bottom:1px solid var(--border);}
+    #context-bar{display:flex;align-items:center;gap:10px;padding:8px 28px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-shrink:0;}
     #context-bar label{font-family:'Cinzel',serif;font-size:11px;color:var(--gold-dim);letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;}
     #game-context-input{flex:1;background:transparent;border:none;outline:none;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:14px;font-style:italic;}
     #game-context-input::placeholder{color:var(--text-faint);}
@@ -50,15 +51,22 @@
     .typing-indicator span:nth-child(2){animation-delay:0.2s;}
     .typing-indicator span:nth-child(3){animation-delay:0.4s;}
     @keyframes bounce{0%,60%,100%{transform:translateY(0);background:var(--text-faint)}30%{transform:translateY(-6px);background:var(--gold-dim)}}
-    #input-area{padding:16px 28px 20px;border-top:1px solid var(--border);}
+    #input-area{padding:16px 28px 20px;border-top:1px solid var(--border);background:linear-gradient(0deg,#0a0806 0%,transparent 100%);flex-shrink:0;}
     #input-row{display:flex;align-items:flex-end;gap:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:3px;padding:10px 14px;transition:border-color 0.2s;}
     #input-row:focus-within{border-color:var(--gold-dim);}
     #user-input{flex:1;background:transparent;border:none;outline:none;color:var(--text-main);font-family:'Crimson Pro',serif;font-size:16px;resize:none;max-height:120px;min-height:24px;line-height:1.5;}
     #user-input::placeholder{color:var(--text-faint);font-style:italic;}
     #send-btn{background:none;border:1px solid var(--gold-dim);color:var(--gold);width:36px;height:36px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all 0.2s;flex-shrink:0;}
-    #send-btn:hover:not(:disabled){background:var(--gold-dim);color:var(--bg-deep);}
+    #send-btn:hover:not(:disabled){background:var(--gold-dim);color:var(--bg-deep);box-shadow:0 0 12px rgba(201,151,42,0.3);}
     #send-btn:disabled{opacity:0.3;cursor:not-allowed;}
+    #mic-btn{background:none;border:1px solid var(--border);color:var(--text-dim);width:36px;height:36px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all 0.2s;flex-shrink:0;}
+    #mic-btn:hover:not(:disabled){border-color:var(--gold-dim);color:var(--gold);}
+    #mic-btn.recording{border-color:#8b1a1a;color:#e05050;box-shadow:0 0 12px rgba(200,50,50,0.4);animation:pulse-fast 0.8s ease-in-out infinite;}
+    #mic-btn:disabled{opacity:0.3;cursor:not-allowed;}
     .input-hint{font-size:11px;color:var(--text-faint);margin-top:8px;text-align:center;font-family:'Cinzel',serif;letter-spacing:1px;}
+    #voice-toggle{display:flex;align-items:center;gap:8px;margin-left:auto;}
+    #voice-toggle label{font-family:'Cinzel',serif;font-size:10px;color:var(--text-faint);letter-spacing:1px;cursor:pointer;}
+    #voice-on{accent-color:var(--gold);cursor:pointer;}
   </style>
 </head>
 <body>
@@ -68,6 +76,10 @@
     <div class="header-text">
       <h1>Game Companion</h1>
       <p>Tu compañero de aventuras</p>
+    </div>
+    <div id="voice-toggle">
+      <input type="checkbox" id="voice-on" checked title="Activar respuesta por voz"/>
+      <label for="voice-on">VOZ</label>
     </div>
     <div class="status-dot">
       <div class="dot" id="status-dot"></div>
@@ -82,26 +94,78 @@
     <div class="welcome" id="welcome-msg">
       <div class="rune">🏰</div>
       <h2>Compañero listo</h2>
-      <p>Contame qué estás jugando y arrancamos la aventura juntos.</p>
+      <p>Contame qué estás jugando y arrancamos la aventura juntos. Podés escribir o usar el micrófono 🎤</p>
     </div>
   </div>
   <div id="input-area">
     <div id="input-row">
+      <button id="mic-btn" title="Click para hablar">🎤</button>
       <textarea id="user-input" rows="1" placeholder="Contame qué está pasando en el juego..."></textarea>
-      <button id="send-btn" title="Enviar">➤</button>
+      <button id="send-btn" title="Enviar (Enter)">➤</button>
     </div>
-    <div class="input-hint">ENTER para enviar · SHIFT+ENTER nueva línea</div>
+    <div class="input-hint">🎤 Click para hablar · ENTER para enviar · SHIFT+ENTER nueva línea</div>
   </div>
 </div>
 <script>
   const messagesEl=document.getElementById('messages');
   const userInput=document.getElementById('user-input');
   const sendBtn=document.getElementById('send-btn');
+  const micBtn=document.getElementById('mic-btn');
   const statusDot=document.getElementById('status-dot');
   const statusText=document.getElementById('status-text');
   const gameCtx=document.getElementById('game-context-input');
-  let history=[];
-  let isThinking=false;
+  const voiceOn=document.getElementById('voice-on');
+  let history=[],isThinking=false,isRecording=false,recognition=null;
+
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(SpeechRecognition){
+    recognition=new SpeechRecognition();
+    recognition.lang='es-AR';
+    recognition.continuous=false;
+    recognition.interimResults=false;
+    recognition.onresult=(e)=>{
+      userInput.value=e.results[0][0].transcript;
+      stopRecording();
+      sendMessage();
+    };
+    recognition.onerror=()=>stopRecording();
+    recognition.onend=()=>{ if(isRecording) stopRecording(); };
+  } else {
+    micBtn.disabled=true;
+    micBtn.title='Tu navegador no soporta voz. Usá Chrome.';
+  }
+
+  function startRecording(){
+    if(!recognition||isThinking)return;
+    isRecording=true;
+    micBtn.classList.add('recording');
+    micBtn.textContent='🔴';
+    statusDot.className='dot recording';
+    statusText.textContent='ESCUCHANDO...';
+    recognition.start();
+  }
+
+  function stopRecording(){
+    isRecording=false;
+    micBtn.classList.remove('recording');
+    micBtn.textContent='🎤';
+    if(!isThinking){statusDot.className='dot';statusText.textContent='EN LÍNEA';}
+    try{recognition.stop();}catch(e){}
+  }
+
+  micBtn.addEventListener('click',()=>{ if(isRecording) stopRecording(); else startRecording(); });
+
+  function speak(text){
+    if(!voiceOn.checked)return;
+    window.speechSynthesis.cancel();
+    const utter=new SpeechSynthesisUtterance(text);
+    utter.lang='es-AR';utter.rate=1.05;utter.pitch=0.95;
+    const voices=window.speechSynthesis.getVoices();
+    const esVoice=voices.find(v=>v.lang.startsWith('es'));
+    if(esVoice)utter.voice=esVoice;
+    window.speechSynthesis.speak(utter);
+  }
+  window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();
 
   userInput.addEventListener('input',()=>{
     userInput.style.height='auto';
@@ -113,7 +177,7 @@
   sendBtn.addEventListener('click',sendMessage);
 
   function setThinking(val){
-    isThinking=val;sendBtn.disabled=val;
+    isThinking=val;sendBtn.disabled=val;micBtn.disabled=val;
     statusDot.className='dot'+(val?' thinking':'');
     statusText.textContent=val?'PENSANDO...':'EN LÍNEA';
   }
@@ -168,7 +232,11 @@
       const data=await res.json();
       removeTyping();
       if(data.error){appendMessage('ai','⚠️ Error: '+data.error);}
-      else{appendMessage('ai',data.message);history.push({role:'assistant',content:data.message});}
+      else{
+        appendMessage('ai',data.message);
+        history.push({role:'assistant',content:data.message});
+        speak(data.message);
+      }
     }catch(err){
       removeTyping();
       appendMessage('ai','⚠️ No pude conectarme. Revisá tu conexión.');
