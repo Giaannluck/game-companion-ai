@@ -35,8 +35,11 @@ export default async function handler(req, res) {
   try {
     const formData = new FormData();
     // Mandar siempre como webm — es lo que Brave realmente graba
-    const blob = new Blob([audioBuffer], { type: 'audio/webm' });
-    formData.append('file', blob, 'audio.webm');
+    // Detectar si es WAV o webm según el filename
+    const isWav = filename.endsWith('.wav');
+    const audioType = isWav ? 'audio/wav' : 'audio/webm';
+    const blob = new Blob([audioBuffer], { type: audioType });
+    formData.append('file', blob, isWav ? 'audio.wav' : 'audio.webm');
     formData.append('model', 'whisper-large-v3-turbo');
     formData.append('language', 'es');
     formData.append('response_format', 'verbose_json');
