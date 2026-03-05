@@ -455,25 +455,61 @@
     }
   }
 
-  // ── TTS ──
-  function speak(text, onEnd) {
+  // ── TTS (ElevenLabs) ──
+  let currentAudio = null;
+
+  async function speak(text, onEnd) {
     if (!voiceOn.checked) { if (onEnd) onEnd(); return; }
+
+    // Parar audio anterior si hay
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+
+    const finish = () => { if (onEnd) onEnd(); };
+
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok) {
+        console.warn('🔊 ElevenLabs falló, usando Web Speech API como fallback');
+        speakFallback(text, onEnd);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      currentAudio = new Audio(url);
+      currentAudio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; finish(); };
+      currentAudio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; finish(); };
+      // Timeout de seguridad 30s
+      const safetyTimer = setTimeout(() => {
+        if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+        finish();
+      }, 30000);
+      currentAudio.onended = () => { clearTimeout(safetyTimer); URL.revokeObjectURL(url); currentAudio = null; finish(); };
+      await currentAudio.play();
+    } catch (err) {
+      console.warn('🔊 Error TTS:', err.message);
+      speakFallback(text, onEnd);
+    }
+  }
+
+  // Fallback con Web Speech API por si ElevenLabs falla
+  function speakFallback(text, onEnd) {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'es-ES'; utter.rate = 1.05; utter.pitch = 0.95;
-    const voices  = window.speechSynthesis.getVoices();
+    const voices = window.speechSynthesis.getVoices();
     const esVoice = voices.find(v => v.lang.startsWith('es'));
     if (esVoice) utter.voice = esVoice;
     let ended = false;
-    const finish = () => {
-      if (ended) return;
-      ended = true;
-      console.log('🔊 speak terminado');
-      if (onEnd) onEnd();
-    };
+    const finish = () => { if (ended) return; ended = true; if (onEnd) onEnd(); };
     const safetyTimer = setTimeout(finish, 15000);
-    utter.onend  = () => { clearTimeout(safetyTimer); console.log('🔊 onend disparó'); finish(); };
-    utter.onerror = () => { clearTimeout(safetyTimer); console.log('🔊 onerror disparó'); finish(); };
+    utter.onend  = () => { clearTimeout(safetyTimer); finish(); };
+    utter.onerror = () => { clearTimeout(safetyTimer); finish(); };
     window.speechSynthesis.speak(utter);
   }
   window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
