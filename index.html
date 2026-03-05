@@ -148,26 +148,29 @@
   let callActive = false;
 
   // Voice
-  let mediaRecorder  = null;
-  let audioChunks    = [];
-  let isRecording    = false;
-  let silenceTimer   = null;
-  let silentFrames   = 0;
-  let audioCtx       = null;
-  let analyser       = null;
-  let animFrame      = null;
-  let micStream      = null;
-  let hasSpeech      = false;
+  let mediaRecorder = null;
+  let audioChunks   = [];
+  let isRecording   = false;
+  let silenceTimer  = null;
+  let silentFrames  = 0;
+  let voiceFrames   = 0;
+  let audioCtx      = null;
+  let analyser      = null;
+  let animFrame     = null;
+  let micStream     = null;
+  let hasSpeech     = false;
 
   const SILENCE_DELAY        = 2500;
-  const SILENT_FRAMES_NEEDED = 20; // ~0.6s de silencio real antes de activar timer
+  const SILENT_FRAMES_NEEDED = 20;  // frames de silencio antes de enviar
+  const VOICE_FRAMES_NEEDED  = 8;   // frames de voz sostenida antes de grabar
+  const VOICE_THRESHOLD      = 30;  // umbral de volumen para considerar voz
 
   // Screen
-  let screenStream     = null;
-  let screenActive     = false;
-  let screenInterval   = null;
-  let lastScreenB64    = null;
-  let lastProactiveTs  = 0;
+  let screenStream    = null;
+  let screenActive    = false;
+  let screenInterval  = null;
+  let lastScreenB64   = null;
+  let lastProactiveTs = 0;
   const SCREEN_INTERVAL    = 8000;
   const PROACTIVE_COOLDOWN = 12000;
 
@@ -325,20 +328,26 @@
     volFill.style.width = pct + '%';
 
     if (callActive && !isThinking && !isSpeaking) {
-      if (vol > 20) {
-        // Hay voz clara
-        hasSpeech = true;
+      if (vol > VOICE_THRESHOLD) {
+        // Voz detectada — necesita varios frames consecutivos para activar
+        voiceFrames++;
         silentFrames = 0;
         clearTimeout(silenceTimer); silenceTimer = null;
-        if (!isRecording) startListening();
-      } else if (isRecording && hasSpeech) {
-        // Posible silencio — contar frames consecutivos
-        silentFrames++;
-        if (silentFrames >= SILENT_FRAMES_NEEDED && !silenceTimer) {
-          silenceTimer = setTimeout(() => {
-            silenceTimer = null;
-            if (isRecording && hasSpeech) stopListening(true);
-          }, SILENCE_DELAY);
+        if (voiceFrames >= VOICE_FRAMES_NEEDED) {
+          hasSpeech = true;
+          if (!isRecording) startListening();
+        }
+      } else {
+        // Silencio
+        voiceFrames = 0;
+        if (isRecording && hasSpeech) {
+          silentFrames++;
+          if (silentFrames >= SILENT_FRAMES_NEEDED && !silenceTimer) {
+            silenceTimer = setTimeout(() => {
+              silenceTimer = null;
+              if (isRecording && hasSpeech) stopListening(true);
+            }, SILENCE_DELAY);
+          }
         }
       }
     }
@@ -347,7 +356,7 @@
 
   function startListening() {
     if (isRecording || !micStream) return;
-    audioChunks = []; hasSpeech = false; silentFrames = 0;
+    audioChunks = []; hasSpeech = false; silentFrames = 0; voiceFrames = 0;
     const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' :
                      MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm';
     try { mediaRecorder = new MediaRecorder(micStream, { mimeType }); }
@@ -369,7 +378,7 @@
 
   function stopListening(send) {
     clearTimeout(silenceTimer); silenceTimer = null;
-    silentFrames = 0;
+    silentFrames = 0; voiceFrames = 0;
     if (!send) hasSpeech = false;
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     isRecording = false;
