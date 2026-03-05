@@ -450,6 +450,7 @@
   }
 
   function resetToListening() {
+    console.log('🔄 resetToListening - isWaitingVoice = true');
     isWaitingVoice = true;
     if (callActive) {
       setStatus('listening', 'ESCUCHANDO...');
