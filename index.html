@@ -575,6 +575,14 @@
   pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); pttStart(); });
   pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); pttStop(); });
 
+  // Tecla { como push-to-talk
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'BracketLeft' && !e.repeat) { e.preventDefault(); pttStart(); }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'BracketLeft') { e.preventDefault(); pttStop(); }
+  });
+
   function sendTextMessage() {
     const text = userInput.value.trim();
     if (!text || isThinking) return;
