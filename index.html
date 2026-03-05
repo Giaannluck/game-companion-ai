@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Game Companion AI</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/bundle.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -286,69 +288,110 @@
     if (callActive) endCall(); else await startCall();
   });
 
+  let micVAD = null;
+
   async function startCall() {
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       callActive = true;
       micBtn.classList.add('active');
       micBtn.textContent = '📵';
-      document.getElementById('ptt-btn').disabled = false;
       micBtn.title = 'Click para colgar';
       volBar.classList.add('active');
-      setStatus('listening', 'LISTO');
-      setStatusBar('🎙 Mantené 🔴 o F13 para hablar');
-      setupAudioAnalyser(micStream);
+      document.getElementById('ptt-btn').disabled = false;
+      setStatus('listening', 'INICIANDO...');
+      setStatusBar('🎙 Cargando detector de voz...');
+
+      micVAD = await vad.MicVAD.new({
+        onSpeechStart: () => {
+          if (!callActive || isThinking) return;
+          if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+          setStatus('recording', 'GRABANDO...');
+          setStatusBar('🔴 Grabando...');
+        },
+        onSpeechEnd: async (audio) => {
+          if (!callActive) return;
+          setStatus('thinking', 'TRANSCRIBIENDO...');
+          setStatusBar('⏳ Transcribiendo...');
+          const wavBlob = float32ToWav(audio, 16000);
+          await transcribeAndSend(wavBlob);
+        },
+        onnxWASMBasePath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/',
+        baseAssetPath: 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/',
+        positiveSpeechThreshold: 0.6,
+        negativeSpeechThreshold: 0.4,
+        minSpeechFrames: 4,
+        preSpeechPadFrames: 10,
+        redemptionFrames: 12,
+      });
+
+      micVAD.start();
+      setStatus('listening', 'ESCUCHANDO...');
+      setStatusBar('🎙 Escuchando...');
     } catch (err) {
-      setStatusBar('❌ No se pudo acceder al micrófono');
+      callActive = false;
+      micBtn.classList.remove('active');
+      micBtn.textContent = '🎤';
+      setStatusBar('❌ Error: ' + err.message);
+      console.error(err);
     }
   }
 
   function endCall() {
     callActive = false;
-    isWaitingVoice = false;
-    abortRecording();
-    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
-    if (audioCtx) { audioCtx.close(); audioCtx = null; }
-    if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
-    clearTimeout(silenceTimer); silenceTimer = null;
+    if (micVAD) { try { micVAD.pause(); } catch(e) {} micVAD = null; }
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     micBtn.classList.remove('active');
     micBtn.textContent = '🎤';
     micBtn.title = 'Llamada de voz';
     volBar.classList.remove('active');
     volFill.style.width = '0%';
+    document.getElementById('ptt-btn').disabled = true;
     setStatus('online', 'EN LÍNEA');
     clearStatusBar();
-    window.speechSynthesis.cancel();
-    isSpeaking = false;
   }
 
-  function setupAudioAnalyser(stream) {
-    // Solo para mostrar la barra de volumen — sin VAD automático
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 1024;
-    const source = audioCtx.createMediaStreamSource(stream);
-    source.connect(analyser);
-    monitorVolume();
+  // Convierte Float32Array de Silero VAD a WAV para Whisper
+  function float32ToWav(samples, sampleRate) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const ws = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0,'RIFF'); view.setUint32(4, 36 + samples.length * 2, true);
+    ws(8,'WAVE'); ws(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
+    view.setUint16(22,1,true); view.setUint32(24,sampleRate,true);
+    view.setUint32(28,sampleRate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true);
+    ws(36,'data'); view.setUint32(40,samples.length*2,true);
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      offset += 2;
+    }
+    return new Blob([buffer], { type: 'audio/wav' });
   }
 
-  function monitorVolume() {
-    if (!analyser) return;
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(data);
-    const vol = data.reduce((a, b) => a + b, 0) / data.length;
-    volFill.style.width = Math.min(vol * 3, 100) + '%';
-    animFrame = requestAnimationFrame(monitorVolume);
-  }
-
-  function beginRecording() {
-    if (isRecording || !micStream) return;
-    audioChunks = [];
+  function setupMediaRecorder() {
+    // Crear MediaRecorder UNA SOLA VEZ y reutilizarlo
+    if (!micStream) return;
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
                      MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
     try { mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream); }
     catch(e) { mediaRecorder = new MediaRecorder(micStream); }
-    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      if (!callActive) { resetToListening(); return; }
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      if (blob.size < 1000) { resetToListening(); return; }
+      await transcribeAndSend(blob);
+    };
+  }
+
+  function beginRecording() {
+    if (isRecording || !mediaRecorder) return;
+    audioChunks = [];
     mediaRecorder.start(100);
     isRecording = true;
     setStatus('recording', 'GRABANDO...');
@@ -357,22 +400,7 @@
   function finishRecording() {
     if (!isRecording || !mediaRecorder) return;
     isRecording = false;
-    isWaitingVoice = false;
-    silentFrames = 0; voiceFrames = 0;
-    // Timeout de seguridad por si el evento stop no dispara
-    const stopTimeout = setTimeout(() => {
-      console.warn('⚠️ stop no disparó, forzando resetToListening');
-      resetToListening();
-    }, 3000);
-    mediaRecorder.addEventListener('stop', async () => {
-      clearTimeout(stopTimeout);
-      if (!callActive) return;
-      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-      if (blob.size < 1000) { resetToListening(); return; }
-      await transcribeAndSend(blob);
-    }, { once: true });
-    mediaRecorder.requestData();
-    mediaRecorder.stop();
+    if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
   }
 
   function abortRecording() {
@@ -391,7 +419,7 @@
     setStatusBar('⏳ Transcribiendo...');
     try {
       const formData = new FormData();
-      formData.append('file', blob, 'audio.webm');
+      formData.append('file', blob, blob.type === 'audio/wav' ? 'audio.wav' : 'audio.webm');
       const res  = await fetch('/api/transcribe', { method: 'POST', body: formData });
       const data = await res.json();
       if (data.error) { setStatusBar('❌ ' + data.error); resetToListening(); return; }
@@ -409,8 +437,8 @@
 
   function resetToListening() {
     if (callActive) {
-      setStatus('listening', 'LISTO');
-      setStatusBar('🎙 Mantené 🔴 o F13 para hablar');
+      setStatus('listening', 'ESCUCHANDO...');
+      setStatusBar('🎙 Escuchando...');
     }
   }
 
