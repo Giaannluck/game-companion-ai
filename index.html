@@ -142,13 +142,15 @@
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunks = [];
-      mediaRecorder = new MediaRecorder(stream);
+      const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' :
+                 MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm';
+mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunks.push(e.data);
       };
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
         await transcribeAndSend(blob);
       };
       mediaRecorder.start();
