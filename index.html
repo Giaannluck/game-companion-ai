@@ -157,7 +157,7 @@
   let animFrame     = null;
   let micStream     = null;
   let hasSpeech     = false;
-  const SILENCE_DELAY = 2000;
+  const SILENCE_DELAY = 2500;
 
   // Screen
   let screenStream    = null;
@@ -336,7 +336,7 @@
     const pct = Math.min(vol * 2, 100);
     volFill.style.width = pct + '%';
     if (callActive && !isThinking && !isSpeaking) {
-      if (vol > 8) {
+      if (vol > 20) {
         hasSpeech = true;
         clearTimeout(silenceTimer); silenceTimer = null;
         if (!isRecording) startListening();
