@@ -165,7 +165,7 @@
 
   const SILENCE_DELAY        = 2500;  // más tiempo esperando que terminés de hablar
 const SILENT_FRAMES_NEEDED = 20;    // más frames de silencio antes de cortar
-const VOICE_FRAMES_NEEDED  = 3;     // arranca a grabar más rápido
+const VOICE_FRAMES_NEEDED  = 5;     // arranca a grabar más rápido
   const CALIBRATION_MS       = 2000;
 
   // Screen
@@ -450,8 +450,10 @@ const VOICE_FRAMES_NEEDED  = 3;     // arranca a grabar más rápido
   }
 
   function resetToListening() {
-    console.log('🔄 resetToListening - isWaitingVoice = true');
+    console.log('🔄 reset - isThinking:', isThinking, 'isWaitingVoice:', isWaitingVoice);
     isWaitingVoice = true;
+    ...
+}
     if (callActive) {
       setStatus('listening', 'ESCUCHANDO...');
       setStatusBar('🎙 Escuchando...');
@@ -479,10 +481,11 @@ const VOICE_FRAMES_NEEDED  = 3;     // arranca a grabar más rápido
     // Timeout de seguridad: si onend no dispara en 15s, continuamos igual
     const safetyTimer = setTimeout(finish, 15000);
     
-    utter.onend = () => { clearTimeout(safetyTimer); finish(); };
-    utter.onerror = () => { clearTimeout(safetyTimer); finish(); };
-    window.speechSynthesis.speak(utter);
-  }
+   utter.onend = () => { 
+    clearTimeout(safetyTimer); 
+    console.log('🔊 onend disparó');
+    finish(); 
+};
 
   // ── TEXT INPUT ──
   userInput.addEventListener('input', () => {
