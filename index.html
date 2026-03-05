@@ -127,47 +127,49 @@
 </div>
 
 <script>
-  const messagesEl  = document.getElementById('messages');
-  const userInput   = document.getElementById('user-input');
-  const sendBtn     = document.getElementById('send-btn');
-  const micBtn      = document.getElementById('mic-btn');
-  const screenBtn   = document.getElementById('screen-btn');
-  const statusDot   = document.getElementById('status-dot');
-  const statusText  = document.getElementById('status-text');
-  const gameCtx     = document.getElementById('game-context-input');
-  const voiceOn     = document.getElementById('voice-on');
-  const statusBar   = document.getElementById('status-bar');
-  const volBar      = document.getElementById('vol-bar');
-  const volFill     = document.getElementById('vol-fill');
-  const screenBar   = document.getElementById('screen-bar');
-  const screenPrev  = document.getElementById('screen-preview');
+  const messagesEl = document.getElementById('messages');
+  const userInput  = document.getElementById('user-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const micBtn     = document.getElementById('mic-btn');
+  const screenBtn  = document.getElementById('screen-btn');
+  const statusDot  = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const gameCtx    = document.getElementById('game-context-input');
+  const voiceOn    = document.getElementById('voice-on');
+  const statusBar  = document.getElementById('status-bar');
+  const volBar     = document.getElementById('vol-bar');
+  const volFill    = document.getElementById('vol-fill');
+  const screenBar  = document.getElementById('screen-bar');
+  const screenPrev = document.getElementById('screen-preview');
 
-  let history     = [];
-  let isThinking  = false;
-  let isSpeaking  = false;
-  let callActive  = false;
+  let history    = [];
+  let isThinking = false;
+  let isSpeaking = false;
+  let callActive = false;
 
   // Voice
-  let mediaRecorder = null;
-  let audioChunks   = [];
-  let isRecording   = false;
-  let silenceTimer  = null;
-  let audioCtx      = null;
-  let analyser      = null;
-  let animFrame     = null;
-  let micStream     = null;
-  let hasSpeech     = false;
-  const SILENCE_DELAY = 2500;
+  let mediaRecorder  = null;
+  let audioChunks    = [];
+  let isRecording    = false;
+  let silenceTimer   = null;
+  let silentFrames   = 0;
+  let audioCtx       = null;
+  let analyser       = null;
+  let animFrame      = null;
+  let micStream      = null;
+  let hasSpeech      = false;
+
+  const SILENCE_DELAY        = 2500;
+  const SILENT_FRAMES_NEEDED = 20; // ~0.6s de silencio real antes de activar timer
 
   // Screen
-  let screenStream    = null;
-  let screenActive    = false;
-  let screenInterval  = null;
-  let lastScreenB64   = null;
-  let proactiveTimer  = null;
-  let lastProactiveTs = 0;
-  const SCREEN_INTERVAL   = 8000;  // cada 8 segundos
-  const PROACTIVE_COOLDOWN = 12000; // mínimo entre comentarios proactivos
+  let screenStream     = null;
+  let screenActive     = false;
+  let screenInterval   = null;
+  let lastScreenB64    = null;
+  let lastProactiveTs  = 0;
+  const SCREEN_INTERVAL    = 8000;
+  const PROACTIVE_COOLDOWN = 12000;
 
   // ── SCREEN SHARE ──
   screenBtn.addEventListener('click', async () => {
@@ -180,11 +182,10 @@
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: false });
       screenActive = true;
       screenBtn.classList.add('active');
-      screenBtn.textContent = '🖥';
       screenBtn.title = 'Click para dejar de compartir';
       screenBar.classList.add('active');
       screenStream.getVideoTracks()[0].onended = () => stopScreen();
-      captureScreen(); // captura inmediata
+      captureScreen();
       screenInterval = setInterval(captureAndMaybeComment, SCREEN_INTERVAL);
     } catch (err) {
       setStatusBar('❌ No se pudo compartir pantalla');
@@ -196,43 +197,35 @@
     screenActive = false;
     if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
     clearInterval(screenInterval);
-    clearTimeout(proactiveTimer);
     screenBtn.classList.remove('active');
-    screenBtn.textContent = '🖥';
+    screenBtn.title = 'Compartir pantalla';
     screenBar.classList.remove('active');
     lastScreenB64 = null;
   }
 
   function captureScreen() {
-    if (!screenStream || !screenActive) return null;
+    if (!screenStream || !screenActive) return;
     try {
       const video = document.createElement('video');
       video.srcObject = screenStream;
       video.play();
-      const canvas = document.createElement('canvas');
-      canvas.width  = 640;
-      canvas.height = 360;
-      const ctx = canvas.getContext('2d');
       video.addEventListener('loadeddata', () => {
-        ctx.drawImage(video, 0, 0, 640, 360);
-        const b64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
-        lastScreenB64 = b64;
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 360;
+        canvas.getContext('2d').drawImage(video, 0, 0, 640, 360);
+        lastScreenB64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
         screenPrev.src = canvas.toDataURL('image/jpeg', 0.6);
-        video.pause();
-        video.srcObject = null;
+        video.pause(); video.srcObject = null;
       }, { once: true });
     } catch(e) {}
-    return lastScreenB64;
   }
 
   async function captureAndMaybeComment() {
     if (!screenActive || isThinking || isSpeaking) return;
     captureScreen();
-    // Esperar que el frame esté listo
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 400));
     if (!lastScreenB64) return;
-    const now = Date.now();
-    if (now - lastProactiveTs < PROACTIVE_COOLDOWN) return;
+    if (Date.now() - lastProactiveTs < PROACTIVE_COOLDOWN) return;
     await proactiveComment(lastScreenB64);
   }
 
@@ -245,18 +238,15 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: 'Mirá la pantalla. Si ves algo interesante, peligroso, o que vale la pena comentar, hacelo en 1-2 oraciones. Si es una pantalla tranquila sin nada especial, respondé solo con la palabra SILENCIO.' }],
+          messages: [{ role: 'user', content: 'Mirá esta captura del juego. Respondé SOLO si ves algo realmente notable: un enemigo cerca, una misión activa, un item valioso, una cinemática, peligro inminente, o algo curioso del lore. Variá cómo arrancás cada comentario, nunca repitas la misma frase de apertura. Si la pantalla es un menú, inventario, o escena tranquila sin nada especial, respondé únicamente SILENCIO.' }],
           gameContext: gameCtx.value.trim() || null,
           imageBase64: imageB64
         })
       });
       const data = await res.json();
-      if (data.error || !data.message) { isThinking = false; return; }
+      if (!data.message) { isThinking = false; return; }
       const msg = data.message.trim();
-      if (msg === 'SILENCIO' || msg.toLowerCase().includes('silencio')) {
-        isThinking = false;
-        return;
-      }
+      if (msg.toUpperCase().includes('SILENCIO')) { isThinking = false; return; }
       appendMessage('ai', msg, true);
       history.push({ role: 'assistant', content: msg });
       if (voiceOn.checked) {
@@ -265,9 +255,7 @@
       } else {
         finishThinking();
       }
-    } catch(e) {
-      isThinking = false;
-    }
+    } catch(e) { isThinking = false; }
   }
 
   // ── MIC / CALL ──
@@ -335,16 +323,23 @@
     const vol = getVolume();
     const pct = Math.min(vol * 2, 100);
     volFill.style.width = pct + '%';
+
     if (callActive && !isThinking && !isSpeaking) {
       if (vol > 20) {
+        // Hay voz clara
         hasSpeech = true;
+        silentFrames = 0;
         clearTimeout(silenceTimer); silenceTimer = null;
         if (!isRecording) startListening();
-      } else if (isRecording && hasSpeech && !silenceTimer) {
-        silenceTimer = setTimeout(() => {
-          silenceTimer = null;
-          if (isRecording && hasSpeech) stopListening(true);
-        }, SILENCE_DELAY);
+      } else if (isRecording && hasSpeech) {
+        // Posible silencio — contar frames consecutivos
+        silentFrames++;
+        if (silentFrames >= SILENT_FRAMES_NEEDED && !silenceTimer) {
+          silenceTimer = setTimeout(() => {
+            silenceTimer = null;
+            if (isRecording && hasSpeech) stopListening(true);
+          }, SILENCE_DELAY);
+        }
       }
     }
     animFrame = requestAnimationFrame(monitorVolume);
@@ -352,7 +347,7 @@
 
   function startListening() {
     if (isRecording || !micStream) return;
-    audioChunks = []; hasSpeech = false;
+    audioChunks = []; hasSpeech = false; silentFrames = 0;
     const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' :
                      MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm';
     try { mediaRecorder = new MediaRecorder(micStream, { mimeType }); }
@@ -374,6 +369,7 @@
 
   function stopListening(send) {
     clearTimeout(silenceTimer); silenceTimer = null;
+    silentFrames = 0;
     if (!send) hasSpeech = false;
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     isRecording = false;
@@ -391,7 +387,6 @@
       const transcript = data.transcript?.trim();
       if (!transcript) { resetToListening(); return; }
       clearStatusBar();
-      // Capturar pantalla al momento de hablar
       if (screenActive) captureScreen();
       await new Promise(r => setTimeout(r, 300));
       await processMessage(transcript);
