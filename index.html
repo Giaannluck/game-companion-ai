@@ -467,10 +467,22 @@
     const voices  = window.speechSynthesis.getVoices();
     const esVoice = voices.find(v => v.lang.startsWith('es'));
     if (esVoice) utter.voice = esVoice;
-    utter.onend = () => { if (onEnd) onEnd(); };
+    
+    let ended = false;
+    const finish = () => {
+      if (ended) return;
+      ended = true;
+      console.log('🔊 speak terminado');
+      if (onEnd) onEnd();
+    };
+    
+    // Timeout de seguridad: si onend no dispara en 15s, continuamos igual
+    const safetyTimer = setTimeout(finish, 15000);
+    
+    utter.onend = () => { clearTimeout(safetyTimer); finish(); };
+    utter.onerror = () => { clearTimeout(safetyTimer); finish(); };
     window.speechSynthesis.speak(utter);
   }
-  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
   // ── TEXT INPUT ──
   userInput.addEventListener('input', () => {
