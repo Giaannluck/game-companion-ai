@@ -78,6 +78,9 @@
     #voice-toggle{display:flex;align-items:center;gap:8px;margin-left:auto;}
     #voice-toggle label{font-family:'Cinzel',serif;font-size:10px;color:var(--text-faint);letter-spacing:1px;cursor:pointer;}
     #voice-on{accent-color:var(--gold);cursor:pointer;}
+    #volume-slider{width:70px;accent-color:var(--gold);cursor:pointer;vertical-align:middle;opacity:0.7;transition:opacity 0.2s;}
+    #volume-slider:hover{opacity:1;}
+    #volume-icon{font-size:13px;cursor:pointer;user-select:none;}
     #status-bar{min-height:0;overflow:hidden;transition:all 0.2s;font-size:13px;color:var(--text-dim);font-style:italic;padding:0 28px;font-family:'Crimson Pro',serif;}
     #status-bar.visible{min-height:24px;padding:6px 28px;border-bottom:1px solid var(--border);background:var(--bg-panel);}
   </style>
@@ -93,6 +96,8 @@
     <div id="voice-toggle">
       <input type="checkbox" id="voice-on" checked/>
       <label for="voice-on">VOZ</label>
+      <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.8" title="Volumen del compañero"/>
+      <span id="volume-icon">🔊</span>
     </div>
     <div class="status-dot">
       <div class="dot" id="status-dot"></div>
@@ -136,7 +141,15 @@
   const statusDot  = document.getElementById('status-dot');
   const statusText = document.getElementById('status-text');
   const gameCtx    = document.getElementById('game-context-input');
-  const voiceOn    = document.getElementById('voice-on');
+  const voiceOn      = document.getElementById('voice-on');
+  const volumeSlider = document.getElementById('volume-slider');
+  const volumeIcon   = document.getElementById('volume-icon');
+
+  volumeSlider.addEventListener('input', () => {
+    const v = parseFloat(volumeSlider.value);
+    if (currentAudio) currentAudio.volume = v;
+    volumeIcon.textContent = v === 0 ? '🔇' : v < 0.4 ? '🔉' : '🔊';
+  });
   const statusBar  = document.getElementById('status-bar');
   const volBar     = document.getElementById('vol-bar');
   const volFill    = document.getElementById('vol-fill');
@@ -482,6 +495,7 @@
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       currentAudio = new Audio(url);
+      currentAudio.volume = parseFloat(volumeSlider.value);
       currentAudio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; finish(); };
       currentAudio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; finish(); };
       // Timeout de seguridad 30s
