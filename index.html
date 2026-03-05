@@ -181,10 +181,7 @@
   let micStream      = null;
   let voiceThreshold = 30;
 
-  const SILENCE_DELAY        = 2500;
-  const SILENT_FRAMES_NEEDED = 20;
-  const VOICE_FRAMES_NEEDED  = 5;
-  const CALIBRATION_MS       = 2000;
+  // PTT only — no VAD
 
   // Screen
   let screenStream    = null;
@@ -298,37 +295,12 @@
       document.getElementById('ptt-btn').disabled = false;
       micBtn.title = 'Click para colgar';
       volBar.classList.add('active');
-      setStatus('listening', 'CALIBRANDO...');
-      setStatusBar('🎙 Quedate callado 2 segundos para calibrar...');
+      setStatus('listening', 'LISTO');
+      setStatusBar('🎙 Mantené 🔴 o F13 para hablar');
       setupAudioAnalyser(micStream);
-      await calibrateNoise();
-      setStatus('listening', 'ESCUCHANDO...');
-      setStatusBar('🎙 Escuchando...');
-      isWaitingVoice = true;
     } catch (err) {
       setStatusBar('❌ No se pudo acceder al micrófono');
     }
-  }
-
-  async function calibrateNoise() {
-    return new Promise(resolve => {
-      const samples = [];
-      const startTime = Date.now();
-      function sample() {
-        if (!analyser) { resolve(); return; }
-        samples.push(getVolume());
-        if (Date.now() - startTime < CALIBRATION_MS) {
-          setTimeout(sample, 50);
-        } else {
-          const max = Math.max(...samples);
-          voiceThreshold = max * 4.5 + 15;
-          const pct = Math.min(voiceThreshold * 2, 98);
-          volThresh.style.left = pct + '%';
-          resolve();
-        }
-      }
-      sample();
-    });
   }
 
   function endCall() {
@@ -351,57 +323,21 @@
   }
 
   function setupAudioAnalyser(stream) {
+    // Solo para mostrar la barra de volumen — sin VAD automático
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.3;
     const source = audioCtx.createMediaStreamSource(stream);
     source.connect(analyser);
     monitorVolume();
   }
 
-  function getVolume() {
-    if (!analyser) return 0;
-    const data  = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(data);
-    const start = Math.floor(100 / (audioCtx.sampleRate / analyser.fftSize));
-    const end   = Math.floor(3000 / (audioCtx.sampleRate / analyser.fftSize));
-    let sum = 0;
-    for (let i = start; i < end; i++) sum += data[i];
-    return sum / (end - start);
-  }
-
   function monitorVolume() {
     if (!analyser) return;
-    const vol = getVolume();
-    volFill.style.width = Math.min(vol * 2, 100) + '%';
-
-    if (callActive && !isThinking && !pttActive) {
-      if (vol > voiceThreshold) {
-        voiceFrames++;
-        silentFrames = 0;
-        clearTimeout(silenceTimer); silenceTimer = null;
-        if (voiceFrames >= VOICE_FRAMES_NEEDED) {
-          if (isSpeaking) { window.speechSynthesis.cancel(); isSpeaking = false; }
-          if (!isRecording && isWaitingVoice) {
-            console.log('🎙 VOZ DETECTADA - arrancando grabación');
-            beginRecording();
-          }
-        }
-      } else {
-        voiceFrames = 0;
-        if (isRecording) {
-          silentFrames++;
-          if (silentFrames >= SILENT_FRAMES_NEEDED && !silenceTimer) {
-            silenceTimer = setTimeout(() => {
-              silenceTimer = null;
-              console.log('✅ finishRecording llamado');
-              if (isRecording) finishRecording();
-            }, SILENCE_DELAY);
-          }
-        }
-      }
-    }
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    const vol = data.reduce((a, b) => a + b, 0) / data.length;
+    volFill.style.width = Math.min(vol * 3, 100) + '%';
     animFrame = requestAnimationFrame(monitorVolume);
   }
 
@@ -472,11 +408,9 @@
   }
 
   function resetToListening() {
-    console.log('🔄 resetToListening - isThinking:', isThinking);
-    isWaitingVoice = true;
     if (callActive) {
-      setStatus('listening', 'ESCUCHANDO...');
-      setStatusBar('🎙 Escuchando...');
+      setStatus('listening', 'LISTO');
+      setStatusBar('🎙 Mantené 🔴 o F13 para hablar');
     }
   }
 
