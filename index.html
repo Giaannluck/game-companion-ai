@@ -23,6 +23,7 @@
     .dot{width:8px;height:8px;border-radius:50%;background:#4a7a3a;box-shadow:0 0 6px #4a7a3a;animation:pulse 2.5s ease-in-out infinite;}
     .dot.thinking{background:var(--gold);box-shadow:0 0 6px var(--gold);animation:pulse-fast 0.8s ease-in-out infinite;}
     .dot.recording{background:#e05050;box-shadow:0 0 6px #e05050;animation:pulse-fast 0.6s ease-in-out infinite;}
+    .dot.listening{background:#4a9a6a;box-shadow:0 0 6px #4a9a6a;animation:pulse 1.5s ease-in-out infinite;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
     @keyframes pulse-fast{0%,100%{opacity:1}50%{opacity:0.3}}
     #context-bar{display:flex;align-items:center;gap:10px;padding:8px 28px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-shrink:0;}
@@ -61,7 +62,7 @@
     #send-btn:disabled{opacity:0.3;cursor:not-allowed;}
     #mic-btn{background:none;border:1px solid var(--border);color:var(--text-dim);width:36px;height:36px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all 0.2s;flex-shrink:0;}
     #mic-btn:hover:not(:disabled){border-color:var(--gold-dim);color:var(--gold);}
-    #mic-btn.active{border-color:#8b1a1a !important;color:#e05050 !important;box-shadow:0 0 16px rgba(200,50,50,0.5);animation:pulse-fast 0.8s ease-in-out infinite;}
+    #mic-btn.active{border-color:#8b1a1a !important;color:#e05050 !important;box-shadow:0 0 16px rgba(200,50,50,0.5);}
     #mic-btn:disabled{opacity:0.3;cursor:not-allowed;}
     .input-hint{font-size:11px;color:var(--text-faint);margin-top:8px;text-align:center;font-family:'Cinzel',serif;letter-spacing:1px;}
     #voice-toggle{display:flex;align-items:center;gap:8px;margin-left:auto;}
@@ -69,6 +70,10 @@
     #voice-on{accent-color:var(--gold);cursor:pointer;}
     #status-bar{min-height:0;overflow:hidden;transition:all 0.2s;font-size:13px;color:var(--text-dim);font-style:italic;padding:0 28px;font-family:'Crimson Pro',serif;}
     #status-bar.visible{min-height:24px;padding:6px 28px;border-bottom:1px solid var(--border);background:var(--bg-panel);}
+
+    /* Volume visualizer */
+    #vol-bar{height:3px;background:var(--border);flex-shrink:0;transition:none;}
+    #vol-fill{height:100%;width:0%;background:var(--red-ember);transition:width 0.05s;}
   </style>
 </head>
 <body>
@@ -88,6 +93,7 @@
       <span id="status-text">EN LÍNEA</span>
     </div>
   </header>
+  <div id="vol-bar"><div id="vol-fill"></div></div>
   <div id="context-bar">
     <label>Juego:</label>
     <input id="game-context-input" type="text" placeholder="¿Qué estás jugando? (ej: Kingdom Come Deliverance 2...)"/>
@@ -97,16 +103,16 @@
     <div class="welcome" id="welcome-msg">
       <div class="rune">🏰</div>
       <h2>Compañero listo</h2>
-      <p>Escribí o tocá 🎤 para hablar. El micrófono graba mientras lo tenés activo — cuando lo apagás, manda el audio.</p>
+      <p>Tocá 🎤 para abrir la llamada. Hablá cuando quieras — para automáticamente cuando te callás y responde solo.</p>
     </div>
   </div>
   <div id="input-area">
     <div id="input-row">
-      <button id="mic-btn" title="Click para grabar, click de nuevo para enviar">🎤</button>
-      <textarea id="user-input" rows="1" placeholder="Contame qué está pasando en el juego..."></textarea>
+      <button id="mic-btn" title="Click para iniciar llamada">🎤</button>
+      <textarea id="user-input" rows="1" placeholder="O escribí acá..."></textarea>
       <button id="send-btn" title="Enviar (Enter)">➤</button>
     </div>
-    <div class="input-hint">🎤 Click para grabar · Click de nuevo para enviar · ENTER para texto</div>
+    <div class="input-hint">🎤 Llamada de voz · 📵 Colgar · ENTER para texto</div>
   </div>
 </div>
 
@@ -120,119 +126,182 @@
   const gameCtx    = document.getElementById('game-context-input');
   const voiceOn    = document.getElementById('voice-on');
   const statusBar  = document.getElementById('status-bar');
+  const volFill    = document.getElementById('vol-fill');
 
-  let history     = [];
-  let isThinking  = false;
-  let isSpeaking  = false;
-  let isRecording = false;
-  let mediaRecorder = null;
-  let audioChunks = [];
+  let history      = [];
+  let isThinking   = false;
+  let isSpeaking   = false;
+  let callActive   = false;
 
-  // ── Mic button: click to start, click again to stop & send ──
+  // Recording state
+  let mediaRecorder  = null;
+  let audioChunks    = [];
+  let isRecording    = false;
+  let silenceTimer   = null;
+  let audioCtx       = null;
+  let analyser       = null;
+  let animFrame      = null;
+  let stream         = null;
+  let hasSpeech      = false;
+
+  const SILENCE_THRESHOLD = 10;   // volumen mínimo para considerar voz
+  const SILENCE_DELAY     = 1500; // ms de silencio antes de enviar
+
+  // ── CALL TOGGLE ──
   micBtn.addEventListener('click', async () => {
-    if (isThinking || isSpeaking) return;
-    if (isRecording) {
-      stopRecording();
+    if (callActive) {
+      endCall();
     } else {
-      await startRecording();
+      await startCall();
     }
   });
 
-  async function startRecording() {
+  async function startCall() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunks = [];
-      const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' :
-                 MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm';
-mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunks.push(e.data);
-      };
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-        await transcribeAndSend(blob);
-      };
-      mediaRecorder.start();
-      isRecording = true;
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      callActive = true;
       micBtn.classList.add('active');
-      micBtn.textContent = '⏹';
-      micBtn.title = 'Click para enviar';
-      statusDot.className = 'dot recording';
-      statusText.textContent = 'GRABANDO...';
-      setStatusBar('🎙 Grabando... click en ⏹ para enviar');
+      micBtn.textContent = '📵';
+      micBtn.title = 'Click para colgar';
+      setStatus('listening', 'ESCUCHANDO...');
+      setStatusBar('🎙 Escuchando... hablá cuando quieras');
+      setupAudioAnalyser(stream);
+      startListening();
     } catch (err) {
-      setStatusBar('❌ No se pudo acceder al micrófono: ' + err.message);
+      setStatusBar('❌ No se pudo acceder al micrófono');
     }
   }
 
-  function stopRecording() {
+  function endCall() {
+    callActive = false;
+    stopListening(false); // false = no enviar
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    clearTimeout(silenceTimer);
+    micBtn.classList.remove('active');
+    micBtn.textContent = '🎤';
+    micBtn.title = 'Click para iniciar llamada';
+    volFill.style.width = '0%';
+    setStatus('online', 'EN LÍNEA');
+    clearStatusBar();
+    window.speechSynthesis.cancel();
+  }
+
+  // ── AUDIO ANALYSER (visualizer + silence detection) ──
+  function setupAudioAnalyser(stream) {
+    audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+    analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    const source = audioCtx.createMediaStreamSource(stream);
+    source.connect(analyser);
+    monitorVolume();
+  }
+
+  function monitorVolume() {
+    if (!analyser) return;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    const vol = data.reduce((a, b) => a + b, 0) / data.length;
+    volFill.style.width = Math.min(vol * 3, 100) + '%';
+
+    if (callActive && !isThinking && !isSpeaking) {
+      if (vol > SILENCE_THRESHOLD) {
+        // Hay voz
+        if (!isRecording) startListening();
+        hasSpeech = true;
+        clearTimeout(silenceTimer);
+      } else if (isRecording && hasSpeech) {
+        // Silencio después de voz
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          if (isRecording) stopListening(true); // enviar
+        }, SILENCE_DELAY);
+      }
+    }
+
+    animFrame = requestAnimationFrame(monitorVolume);
+  }
+
+  // ── RECORDING ──
+  function startListening() {
+    if (isRecording || !stream) return;
+    audioChunks = [];
+    hasSpeech   = false;
+    const mimeType = MediaRecorder.isTypeSupported('audio/wav')  ? 'audio/wav'  :
+                     MediaRecorder.isTypeSupported('audio/ogg')  ? 'audio/ogg'  : 'audio/webm';
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      if (hasSpeech && callActive) {
+        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+        await transcribeAndSend(blob);
+      } else if (callActive && !isThinking) {
+        setStatus('listening', 'ESCUCHANDO...');
+        setStatusBar('🎙 Escuchando...');
+      }
+    };
+    mediaRecorder.start();
+    isRecording = true;
+    setStatus('recording', 'GRABANDO...');
+  }
+
+  function stopListening(send) {
+    clearTimeout(silenceTimer);
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      if (!send) hasSpeech = false; // evitar que onstop envíe
       mediaRecorder.stop();
     }
     isRecording = false;
-    micBtn.classList.remove('active');
-    micBtn.textContent = '🎤';
-    micBtn.title = 'Click para grabar';
-    statusDot.className = 'dot thinking';
-    statusText.textContent = 'TRANSCRIBIENDO...';
-    setStatusBar('⏳ Transcribiendo con Whisper...');
   }
 
+  // ── TRANSCRIBE ──
   async function transcribeAndSend(blob) {
+    setStatus('thinking', 'TRANSCRIBIENDO...');
+    setStatusBar('⏳ Transcribiendo...');
     try {
       const formData = new FormData();
-      formData.append('file', blob, 'audio.webm');
-
-      const res = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
+      formData.append('file', blob, 'audio.wav');
+      const res  = await fetch('/api/transcribe', { method: 'POST', body: formData });
       const data = await res.json();
-
-      if (data.error) {
-        setStatusBar('❌ Error al transcribir: ' + data.error);
-        resetStatus();
-        return;
-      }
-
+      if (data.error) { setStatusBar('❌ ' + data.error); resetToListening(); return; }
       const transcript = data.transcript?.trim();
-      if (!transcript) {
-        setStatusBar('⚠️ No se escuchó nada, intentá de nuevo');
-        resetStatus();
-        return;
-      }
-
+      if (!transcript) { resetToListening(); return; }
       clearStatusBar();
       await processMessage(transcript);
-
     } catch (err) {
       setStatusBar('❌ Error: ' + err.message);
-      resetStatus();
+      resetToListening();
     }
   }
 
-  // ── Text to Speech ──
+  function resetToListening() {
+    if (callActive) {
+      setTimeout(() => {
+        setStatus('listening', 'ESCUCHANDO...');
+        setStatusBar('🎙 Escuchando...');
+      }, 1500);
+    }
+  }
+
+  // ── TTS ──
   function speak(text, onEnd) {
     if (!voiceOn.checked) { if (onEnd) onEnd(); return; }
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = 'es-ES';
-    utter.rate = 1.05;
+    utter.lang  = 'es-ES';
+    utter.rate  = 1.05;
     utter.pitch = 0.95;
-    const voices = window.speechSynthesis.getVoices();
+    const voices  = window.speechSynthesis.getVoices();
     const esVoice = voices.find(v => v.lang.startsWith('es'));
     if (esVoice) utter.voice = esVoice;
     isSpeaking = true;
-    utter.onend = () => {
-      isSpeaking = false;
-      if (onEnd) onEnd();
-    };
+    utter.onend = () => { isSpeaking = false; if (onEnd) onEnd(); };
     window.speechSynthesis.speak(utter);
   }
   window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
-  // ── Text input ──
+  // ── TEXT INPUT ──
   userInput.addEventListener('input', () => {
     userInput.style.height = 'auto';
     userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
@@ -250,20 +319,18 @@ mediaRecorder = new MediaRecorder(stream, { mimeType });
     processMessage(text);
   }
 
-  // ── Core ──
+  // ── CORE ──
   async function processMessage(text) {
     if (isThinking) return;
     isThinking = true;
     sendBtn.disabled = true;
-    micBtn.disabled = true;
     appendMessage('user', text);
     history.push({ role: 'user', content: text });
     showTyping();
-    statusDot.className = 'dot thinking';
-    statusText.textContent = 'PENSANDO...';
+    setStatus('thinking', 'PENSANDO...');
 
     try {
-      const res = await fetch('/api/chat', {
+      const res  = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, gameContext: gameCtx.value.trim() || null })
@@ -271,13 +338,17 @@ mediaRecorder = new MediaRecorder(stream, { mimeType });
       const data = await res.json();
       removeTyping();
       if (data.error) {
-        appendMessage('ai', '⚠️ Error: ' + data.error);
+        appendMessage('ai', '⚠️ ' + data.error);
         finishThinking();
       } else {
         appendMessage('ai', data.message);
         history.push({ role: 'assistant', content: data.message });
-        speak(data.message, () => finishThinking());
-        if (!voiceOn.checked) finishThinking();
+        if (voiceOn.checked) {
+          setStatus('thinking', 'HABLANDO...');
+          speak(data.message, () => finishThinking());
+        } else {
+          finishThinking();
+        }
       }
     } catch (err) {
       removeTyping();
@@ -287,54 +358,50 @@ mediaRecorder = new MediaRecorder(stream, { mimeType });
   }
 
   function finishThinking() {
-    isThinking = false;
+    isThinking   = false;
     sendBtn.disabled = false;
-    micBtn.disabled = false;
-    statusDot.className = 'dot';
-    statusText.textContent = 'EN LÍNEA';
-  }
-
-  function resetStatus() {
-    setTimeout(() => {
+    if (callActive) {
+      setStatus('listening', 'ESCUCHANDO...');
+      setStatusBar('🎙 Escuchando...');
+      startListening();
+    } else {
+      setStatus('online', 'EN LÍNEA');
       clearStatusBar();
-      finishThinking();
-    }, 3000);
+    }
   }
 
-  function setStatusBar(msg) {
-    statusBar.textContent = msg;
-    statusBar.classList.add('visible');
+  // ── STATUS HELPERS ──
+  function setStatus(type, text) {
+    const map = { online: 'dot', thinking: 'dot thinking', recording: 'dot recording', listening: 'dot listening' };
+    statusDot.className = map[type] || 'dot';
+    statusText.textContent = text;
   }
+  function setStatusBar(msg) { statusBar.textContent = msg; statusBar.classList.add('visible'); }
+  function clearStatusBar()  { statusBar.textContent = ''; statusBar.classList.remove('visible'); }
 
-  function clearStatusBar() {
-    statusBar.textContent = '';
-    statusBar.classList.remove('visible');
-  }
-
-  // ── UI helpers ──
+  // ── UI ──
   function appendMessage(role, text) {
     const welcome = document.getElementById('welcome-msg');
     if (welcome) welcome.remove();
-    const wrap = document.createElement('div');
+    const wrap   = document.createElement('div');
     wrap.className = `message ${role}`;
-    const label = document.createElement('div');
+    const label  = document.createElement('div');
     label.className = 'msg-label';
     label.textContent = role === 'user' ? 'Vos' : 'Compañero';
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
     bubble.textContent = text;
-    wrap.appendChild(label);
-    wrap.appendChild(bubble);
+    wrap.appendChild(label); wrap.appendChild(bubble);
     messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
   function showTyping() {
-    const wrap = document.createElement('div');
+    const wrap  = document.createElement('div');
     wrap.className = 'message ai'; wrap.id = 'typing-wrap';
     const label = document.createElement('div');
     label.className = 'msg-label'; label.textContent = 'Compañero';
-    const ind = document.createElement('div');
+    const ind   = document.createElement('div');
     ind.className = 'typing-indicator';
     ind.innerHTML = '<span></span><span></span><span></span>';
     wrap.appendChild(label); wrap.appendChild(ind);
