@@ -301,7 +301,7 @@
           setTimeout(sample, 50);
         } else {
           const max = Math.max(...samples);
-          voiceThreshold = max * 2.5 + 10;
+          voiceThreshold = max * 4.5 + 15;
           // Mostrar línea blanca del umbral en la barra
           const pct = Math.min(voiceThreshold * 2, 98);
           volThresh.style.left = pct + '%';
