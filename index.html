@@ -29,6 +29,8 @@
     #vol-bar{height:6px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-shrink:0;display:none;}
     #vol-bar.active{display:block;}
     #vol-fill{height:100%;width:0%;background:linear-gradient(90deg,#4a7a3a,#c9972a,#e05050);transition:width 0.05s;}
+    #vol-threshold{height:100%;width:2px;background:rgba(255,255,255,0.4);position:absolute;top:0;}
+    #vol-bar{position:relative;}
     #context-bar{display:flex;align-items:center;gap:10px;padding:8px 28px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-shrink:0;}
     #context-bar label{font-family:'Cinzel',serif;font-size:11px;color:var(--gold-dim);letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;}
     #game-context-input{flex:1;background:transparent;border:none;outline:none;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:14px;font-style:italic;}
@@ -98,7 +100,7 @@
       <span id="status-text">EN LÍNEA</span>
     </div>
   </header>
-  <div id="vol-bar"><div id="vol-fill"></div></div>
+  <div id="vol-bar"><div id="vol-fill"></div><div id="vol-threshold"></div></div>
   <div id="context-bar">
     <label>Juego:</label>
     <input id="game-context-input" type="text" placeholder="¿Qué estás jugando? (ej: Kingdom Come Deliverance 2...)"/>
@@ -112,7 +114,7 @@
     <div class="welcome" id="welcome-msg">
       <div class="rune">🏰</div>
       <h2>Compañero listo</h2>
-      <p>Tocá 🖥 para compartir pantalla y 🎤 para la llamada de voz. El compañero va a comentar solo lo que ve.</p>
+      <p>Tocá 🖥 para compartir pantalla y 🎤 para la llamada de voz. Al abrir el micrófono calibra el ruido de tu ambiente solo.</p>
     </div>
   </div>
   <div id="input-area">
@@ -139,6 +141,7 @@
   const statusBar  = document.getElementById('status-bar');
   const volBar     = document.getElementById('vol-bar');
   const volFill    = document.getElementById('vol-fill');
+  const volThresh  = document.getElementById('vol-threshold');
   const screenBar  = document.getElementById('screen-bar');
   const screenPrev = document.getElementById('screen-preview');
 
@@ -148,22 +151,24 @@
   let callActive = false;
 
   // Voice
-  let mediaRecorder = null;
-  let audioChunks   = [];
-  let isRecording   = false;
-  let silenceTimer  = null;
-  let silentFrames  = 0;
-  let voiceFrames   = 0;
-  let audioCtx      = null;
-  let analyser      = null;
-  let animFrame     = null;
-  let micStream     = null;
-  let hasSpeech     = false;
+  let mediaRecorder  = null;
+  let audioChunks    = [];
+  let isRecording    = false;
+  let silenceTimer   = null;
+  let silentFrames   = 0;
+  let voiceFrames    = 0;
+  let audioCtx       = null;
+  let analyser       = null;
+  let animFrame      = null;
+  let micStream      = null;
+  let hasSpeech      = false;
+  let noiseFloor     = 15;   // se calibra automáticamente
+  let voiceThreshold = 30;   // se ajusta tras calibración
 
-  const SILENCE_DELAY        = 2500;
-  const SILENT_FRAMES_NEEDED = 20;  // frames de silencio antes de enviar
-  const VOICE_FRAMES_NEEDED  = 8;   // frames de voz sostenida antes de grabar
-  const VOICE_THRESHOLD      = 30;  // umbral de volumen para considerar voz
+  const SILENCE_DELAY       = 2000;
+  const SILENT_FRAMES_NEEDED = 15;
+  const VOICE_FRAMES_NEEDED  = 6;
+  const CALIBRATION_MS       = 2000; // tiempo de calibración al abrir mic
 
   // Screen
   let screenStream    = null;
@@ -275,13 +280,44 @@
       micBtn.textContent = '📵';
       micBtn.title = 'Click para colgar';
       volBar.classList.add('active');
+      setStatus('listening', 'CALIBRANDO...');
+      setStatusBar('🎙 Calibrando ruido ambiente, quedate en silencio...');
+      setupAudioAnalyser(micStream);
+      // Calibrar primero, después arrancar
+      await calibrateNoise();
       setStatus('listening', 'ESCUCHANDO...');
       setStatusBar('🎙 Escuchando...');
-      setupAudioAnalyser(micStream);
       startListening();
     } catch (err) {
       setStatusBar('❌ No se pudo acceder al micrófono');
     }
+  }
+
+  // Mide el ruido de fondo durante CALIBRATION_MS y ajusta el umbral
+  async function calibrateNoise() {
+    return new Promise(resolve => {
+      const samples = [];
+      const startTime = Date.now();
+      function sample() {
+        if (!analyser) { resolve(); return; }
+        samples.push(getVolume());
+        if (Date.now() - startTime < CALIBRATION_MS) {
+          setTimeout(sample, 50);
+        } else {
+          // Calcular promedio + margen
+          const avg = samples.reduce((a,b) => a+b, 0) / samples.length;
+          const max = Math.max(...samples);
+          noiseFloor = max;
+          voiceThreshold = max * 2.5 + 10; // umbral = 2.5x el ruido máximo + margen
+          // Mostrar línea de umbral en la barra
+          const pct = Math.min(voiceThreshold * 2, 100);
+          volThresh.style.left = pct + '%';
+          console.log(`Calibración: ruido=${avg.toFixed(1)}, max=${max.toFixed(1)}, umbral=${voiceThreshold.toFixed(1)}`);
+          resolve();
+        }
+      }
+      sample();
+    });
   }
 
   function endCall() {
@@ -312,6 +348,7 @@
   }
 
   function getVolume() {
+    if (!analyser) return 0;
     const data  = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(data);
     const start = Math.floor(100 / (audioCtx.sampleRate / analyser.fftSize));
@@ -328,8 +365,7 @@
     volFill.style.width = pct + '%';
 
     if (callActive && !isThinking && !isSpeaking) {
-      if (vol > VOICE_THRESHOLD) {
-        // Voz detectada — necesita varios frames consecutivos para activar
+      if (vol > voiceThreshold) {
         voiceFrames++;
         silentFrames = 0;
         clearTimeout(silenceTimer); silenceTimer = null;
@@ -338,7 +374,6 @@
           if (!isRecording) startListening();
         }
       } else {
-        // Silencio
         voiceFrames = 0;
         if (isRecording && hasSpeech) {
           silentFrames++;
