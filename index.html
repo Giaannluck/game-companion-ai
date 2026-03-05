@@ -373,7 +373,7 @@
         }
       } else {
         voiceFrames = 0;
-        if (isRecording && hasSpeech && !isSpeaking) {
+        if (isRecording && hasSpeech) {
           silentFrames++;
           if (silentFrames >= SILENT_FRAMES_NEEDED && !silenceTimer) {
             silenceTimer = setTimeout(() => {
