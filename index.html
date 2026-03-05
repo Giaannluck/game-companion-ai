@@ -152,8 +152,8 @@
   // Voice
   let mediaRecorder  = null;
   let audioChunks    = [];
-  let isRecording    = false;   // MediaRecorder activo
-  let isWaitingVoice = false;   // mic abierto, esperando voz
+  let isRecording    = false;
+  let isWaitingVoice = false;
   let silenceTimer   = null;
   let silentFrames   = 0;
   let voiceFrames    = 0;
@@ -163,9 +163,9 @@
   let micStream      = null;
   let voiceThreshold = 30;
 
-  const SILENCE_DELAY        = 2500;  // más tiempo esperando que terminés de hablar
-const SILENT_FRAMES_NEEDED = 20;    // más frames de silencio antes de cortar
-const VOICE_FRAMES_NEEDED  = 5;     // arranca a grabar más rápido
+  const SILENCE_DELAY        = 2500;
+  const SILENT_FRAMES_NEEDED = 20;
+  const VOICE_FRAMES_NEEDED  = 5;
   const CALIBRATION_MS       = 2000;
 
   // Screen
@@ -373,9 +373,7 @@ const VOICE_FRAMES_NEEDED  = 5;     // arranca a grabar más rápido
         voiceFrames = 0;
         if (isRecording) {
           silentFrames++;
-          console.log('🔇 silentFrames:', silentFrames, '/ needed:', SILENT_FRAMES_NEEDED);
           if (silentFrames >= SILENT_FRAMES_NEEDED && !silenceTimer) {
-            console.log('⏱ silenceTimer iniciado');
             silenceTimer = setTimeout(() => {
               silenceTimer = null;
               console.log('✅ finishRecording llamado');
@@ -406,16 +404,15 @@ const VOICE_FRAMES_NEEDED  = 5;     // arranca a grabar más rápido
     isRecording = false;
     isWaitingVoice = false;
     silentFrames = 0; voiceFrames = 0;
-    // Asignar onstop PRIMERO, después parar
     mediaRecorder.addEventListener('stop', async () => {
       if (!callActive) return;
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
       if (blob.size < 1000) { resetToListening(); return; }
       await transcribeAndSend(blob);
     }, { once: true });
-    mediaRecorder.requestData(); // fuerza el último dataavailable
+    mediaRecorder.requestData();
     mediaRecorder.stop();
-}
+  }
 
   function abortRecording() {
     clearTimeout(silenceTimer); silenceTimer = null;
@@ -450,10 +447,8 @@ const VOICE_FRAMES_NEEDED  = 5;     // arranca a grabar más rápido
   }
 
   function resetToListening() {
-    console.log('🔄 reset - isThinking:', isThinking, 'isWaitingVoice:', isWaitingVoice);
+    console.log('🔄 resetToListening - isThinking:', isThinking);
     isWaitingVoice = true;
-    ...
-}
     if (callActive) {
       setStatus('listening', 'ESCUCHANDO...');
       setStatusBar('🎙 Escuchando...');
@@ -469,7 +464,6 @@ const VOICE_FRAMES_NEEDED  = 5;     // arranca a grabar más rápido
     const voices  = window.speechSynthesis.getVoices();
     const esVoice = voices.find(v => v.lang.startsWith('es'));
     if (esVoice) utter.voice = esVoice;
-    
     let ended = false;
     const finish = () => {
       if (ended) return;
@@ -477,15 +471,12 @@ const VOICE_FRAMES_NEEDED  = 5;     // arranca a grabar más rápido
       console.log('🔊 speak terminado');
       if (onEnd) onEnd();
     };
-    
-    // Timeout de seguridad: si onend no dispara en 15s, continuamos igual
     const safetyTimer = setTimeout(finish, 15000);
-    
-   utter.onend = () => { 
-    clearTimeout(safetyTimer); 
-    console.log('🔊 onend disparó');
-    finish(); 
-};
+    utter.onend  = () => { clearTimeout(safetyTimer); console.log('🔊 onend disparó'); finish(); };
+    utter.onerror = () => { clearTimeout(safetyTimer); console.log('🔊 onerror disparó'); finish(); };
+    window.speechSynthesis.speak(utter);
+  }
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
   // ── TEXT INPUT ──
   userInput.addEventListener('input', () => {
