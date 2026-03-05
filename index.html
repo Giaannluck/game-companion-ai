@@ -577,10 +577,10 @@
 
   // Tecla { como push-to-talk
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'BracketLeft' && !e.repeat) { e.preventDefault(); pttStart(); }
+    if (e.code === 'Semicolon' && !e.repeat) { e.preventDefault(); pttStart(); }
   });
   document.addEventListener('keyup', (e) => {
-    if (e.code === 'BracketLeft') { e.preventDefault(); pttStop(); }
+    if (e.code === 'Semicolon') { e.preventDefault(); pttStop(); }
   });
 
   function sendTextMessage() {
