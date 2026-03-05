@@ -145,7 +145,7 @@
   let hasSpeech      = false;
 
   const SILENCE_THRESHOLD = 10;   // volumen mínimo para considerar voz
-  const SILENCE_DELAY     = 1500; // ms de silencio antes de enviar
+  const SILENCE_DELAY     = 2000; // ms de silencio antes de enviar
 
   // ── CALL TOGGLE ──
   micBtn.addEventListener('click', async () => {
@@ -207,15 +207,13 @@
 
     if (callActive && !isThinking && !isSpeaking) {
       if (vol > SILENCE_THRESHOLD) {
-        // Hay voz
         if (!isRecording) startListening();
         hasSpeech = true;
         clearTimeout(silenceTimer);
       } else if (isRecording && hasSpeech) {
-        // Silencio después de voz
         clearTimeout(silenceTimer);
         silenceTimer = setTimeout(() => {
-          if (isRecording) stopListening(true); // enviar
+          if (isRecording) stopListening(true);
         }, SILENCE_DELAY);
       }
     }
