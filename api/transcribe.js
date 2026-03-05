@@ -56,9 +56,15 @@ export default async function handler(req, res) {
     if (!text) return res.status(200).json({ transcript: '' });
     
     // Ignorar alucinaciones comunes de Whisper
-    const hallucinations = ['gracias', 'subtítulos', 'suscríbete', 'hasta la próxima'];
+    const hallucinations = [
+      'gracias', 'subtítulos', 'suscríbete', 'hasta la próxima',
+      'gracias por ver', 'gracias por ver el video', 'no olvides suscribirte',
+      'like y suscríbete', 'nos vemos en el próximo', 'hasta el próximo video',
+      'amara.org', 'subtitulado por', 'transcripción por', 'traducido por',
+      'www.', '.com', 'youtube', 'twitch', 'instagram'
+    ];
     const lower = text.toLowerCase();
-    if (hallucinations.some(h => lower === h || lower === h + '.')) {
+    if (hallucinations.some(h => lower === h || lower === h + '.' || lower.includes(h))) {
       return res.status(200).json({ transcript: '' });
     }
 
