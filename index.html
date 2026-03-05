@@ -152,7 +152,8 @@
   // Voice
   let mediaRecorder  = null;
   let audioChunks    = [];
-  let isRecording    = false;
+  let isRecording    = false;   // MediaRecorder activo
+  let isWaitingVoice = false;   // mic abierto, esperando voz
   let silenceTimer   = null;
   let silentFrames   = 0;
   let voiceFrames    = 0;
@@ -160,12 +161,11 @@
   let analyser       = null;
   let animFrame      = null;
   let micStream      = null;
-  let hasSpeech      = false;
   let voiceThreshold = 30;
 
-  const SILENCE_DELAY        = 2000;
-  const SILENT_FRAMES_NEEDED = 15;
-  const VOICE_FRAMES_NEEDED  = 6;
+  const SILENCE_DELAY        = 1800;
+  const SILENT_FRAMES_NEEDED = 12;
+  const VOICE_FRAMES_NEEDED  = 5;
   const CALIBRATION_MS       = 2000;
 
   // Screen
@@ -174,13 +174,12 @@
   let screenInterval  = null;
   let lastScreenB64   = null;
   let lastProactiveTs = 0;
-  const SCREEN_INTERVAL    = 15000; // cada 15 segundos
-  const PROACTIVE_COOLDOWN = 25000; // mínimo 25s entre comentarios
+  const SCREEN_INTERVAL    = 35000;
+  const PROACTIVE_COOLDOWN = 40000;
 
-  // ── SCREEN SHARE ──
+  // ── SCREEN ──
   screenBtn.addEventListener('click', async () => {
-    if (screenActive) stopScreen();
-    else await startScreen();
+    if (screenActive) stopScreen(); else await startScreen();
   });
 
   async function startScreen() {
@@ -244,30 +243,32 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: 'Mirá esta captura del juego. Respondé SOLO si ves algo realmente notable: un enemigo cerca, una misión activa, un item valioso, una cinemática, peligro inminente, o algo curioso del lore. Variá cómo arrancás cada comentario, nunca repitas la misma frase de apertura. Si la pantalla es un menú, inventario, o escena tranquila sin nada especial, respondé únicamente SILENCIO.' }],
+          messages: [{ role: 'user', content: 'Mirá esta captura del juego. Respondé SOLO si ves algo realmente notable: un enemigo cerca, una misión activa, un item valioso, una cinemática, peligro inminente, o algo curioso del lore. Variá cómo arrancás cada comentario, nunca repitas la misma frase de apertura. Si no hay nada especial, respondé únicamente la palabra SILENCIO y nada más.' }],
           gameContext: gameCtx.value.trim() || null,
           imageBase64: imageB64
         })
       });
       const data = await res.json();
-      if (!data.message) { isThinking = false; return; }
+      isThinking = false;
+      if (!data.message) return;
       const msg = data.message.trim();
-      if (msg.toUpperCase().includes('SILENCIO')) { isThinking = false; return; }
+      if (msg.toUpperCase().includes('SILENCIO')) return;
       appendMessage('ai', msg, true);
       history.push({ role: 'assistant', content: msg });
       if (voiceOn.checked) {
+        isSpeaking = true;
         setStatus('thinking', 'HABLANDO...');
-        speak(msg, () => finishThinking());
-      } else {
-        finishThinking();
+        speak(msg, () => {
+          isSpeaking = false;
+          if (callActive) { setStatus('listening', 'ESCUCHANDO...'); setStatusBar('🎙 Escuchando...'); }
+        });
       }
     } catch(e) { isThinking = false; }
   }
 
-  // ── MIC / CALL ──
+  // ── MIC ──
   micBtn.addEventListener('click', async () => {
-    if (callActive) endCall();
-    else await startCall();
+    if (callActive) endCall(); else await startCall();
   });
 
   async function startCall() {
@@ -284,7 +285,7 @@
       await calibrateNoise();
       setStatus('listening', 'ESCUCHANDO...');
       setStatusBar('🎙 Escuchando...');
-      startListening();
+      isWaitingVoice = true;
     } catch (err) {
       setStatusBar('❌ No se pudo acceder al micrófono');
     }
@@ -302,7 +303,6 @@
         } else {
           const max = Math.max(...samples);
           voiceThreshold = max * 4.5 + 15;
-          // Mostrar línea blanca del umbral en la barra
           const pct = Math.min(voiceThreshold * 2, 98);
           volThresh.style.left = pct + '%';
           resolve();
@@ -314,7 +314,8 @@
 
   function endCall() {
     callActive = false;
-    stopListening(false);
+    isWaitingVoice = false;
+    abortRecording();
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
@@ -327,6 +328,7 @@
     setStatus('online', 'EN LÍNEA');
     clearStatusBar();
     window.speechSynthesis.cancel();
+    isSpeaking = false;
   }
 
   function setupAudioAnalyser(stream) {
@@ -355,30 +357,25 @@
     const vol = getVolume();
     volFill.style.width = Math.min(vol * 2, 100) + '%';
 
-    // KEY FIX: detectar voz SIEMPRE, incluso cuando la IA está hablando
-    // Solo bloqueamos si estamos procesando (isThinking)
     if (callActive && !isThinking) {
       if (vol > voiceThreshold) {
+        // ── VOZ ──
         voiceFrames++;
         silentFrames = 0;
         clearTimeout(silenceTimer); silenceTimer = null;
         if (voiceFrames >= VOICE_FRAMES_NEEDED) {
-          hasSpeech = true;
-          // Si la IA está hablando y el usuario habla, cortarla
-          if (isSpeaking) {
-            window.speechSynthesis.cancel();
-            isSpeaking = false;
-          }
-          if (!isRecording) startListening();
+          if (isSpeaking) { window.speechSynthesis.cancel(); isSpeaking = false; }
+          if (!isRecording && isWaitingVoice) beginRecording();
         }
       } else {
+        // ── SILENCIO ──
         voiceFrames = 0;
-        if (isRecording && hasSpeech) {
+        if (isRecording) {
           silentFrames++;
           if (silentFrames >= SILENT_FRAMES_NEEDED && !silenceTimer) {
             silenceTimer = setTimeout(() => {
               silenceTimer = null;
-              if (isRecording && hasSpeech) stopListening(true);
+              if (isRecording) finishRecording();
             }, SILENCE_DELAY);
           }
         }
@@ -387,34 +384,42 @@
     animFrame = requestAnimationFrame(monitorVolume);
   }
 
-  function startListening() {
+  function beginRecording() {
     if (isRecording || !micStream) return;
-    audioChunks = []; hasSpeech = false; silentFrames = 0; voiceFrames = 0;
-    const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' :
-                     MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm';
-    try { mediaRecorder = new MediaRecorder(micStream, { mimeType }); }
+    audioChunks = [];
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+                     MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+    try { mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream); }
     catch(e) { mediaRecorder = new MediaRecorder(micStream); }
-    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
-    mediaRecorder.onstop = async () => {
-      if (hasSpeech && callActive && !isThinking) {
-        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-        await transcribeAndSend(blob);
-      } else if (callActive && !isThinking) {
-        setStatus('listening', 'ESCUCHANDO...');
-        setStatusBar('🎙 Escuchando...');
-      }
-    };
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.start(100);
     isRecording = true;
     setStatus('recording', 'GRABANDO...');
   }
 
-  function stopListening(send) {
+  function finishRecording() {
+    if (!isRecording || !mediaRecorder) return;
+    isRecording = false;
+    isWaitingVoice = false;
+    silentFrames = 0; voiceFrames = 0;
+    mediaRecorder.onstop = async () => {
+      if (!callActive) return;
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      if (blob.size < 1000) { resetToListening(); return; }
+      await transcribeAndSend(blob);
+    };
+    mediaRecorder.stop();
+  }
+
+  function abortRecording() {
     clearTimeout(silenceTimer); silenceTimer = null;
     silentFrames = 0; voiceFrames = 0;
-    if (!send) hasSpeech = false;
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     isRecording = false;
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.ondataavailable = null;
+      mediaRecorder.onstop = null;
+      try { mediaRecorder.stop(); } catch(e) {}
+    }
   }
 
   async function transcribeAndSend(blob) {
@@ -439,10 +444,10 @@
   }
 
   function resetToListening() {
+    isWaitingVoice = true;
     if (callActive) {
       setStatus('listening', 'ESCUCHANDO...');
       setStatusBar('🎙 Escuchando...');
-      startListening();
     }
   }
 
@@ -455,8 +460,7 @@
     const voices  = window.speechSynthesis.getVoices();
     const esVoice = voices.find(v => v.lang.startsWith('es'));
     if (esVoice) utter.voice = esVoice;
-    isSpeaking = true;
-    utter.onend = () => { isSpeaking = false; if (onEnd) onEnd(); };
+    utter.onend = () => { if (onEnd) onEnd(); };
     window.speechSynthesis.speak(utter);
   }
   window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
@@ -502,34 +506,29 @@
       removeTyping();
       if (data.error) {
         appendMessage('ai', '⚠️ ' + data.error);
-        finishThinking();
+        isThinking = false; sendBtn.disabled = false;
+        resetToListening();
       } else {
         appendMessage('ai', data.message);
         history.push({ role: 'assistant', content: data.message });
         if (voiceOn.checked) {
+          isSpeaking = true;
           setStatus('thinking', 'HABLANDO...');
-          speak(data.message, () => finishThinking());
+          speak(data.message, () => {
+            isSpeaking = false;
+            isThinking = false; sendBtn.disabled = false;
+            resetToListening();
+          });
         } else {
-          finishThinking();
+          isThinking = false; sendBtn.disabled = false;
+          resetToListening();
         }
       }
     } catch (err) {
       removeTyping();
       appendMessage('ai', '⚠️ No pude conectarme.');
-      finishThinking();
-    }
-  }
-
-  function finishThinking() {
-    isThinking = false;
-    sendBtn.disabled = false;
-    if (callActive) {
-      setStatus('listening', 'ESCUCHANDO...');
-      setStatusBar('🎙 Escuchando...');
-      startListening();
-    } else {
-      setStatus('online', 'EN LÍNEA');
-      clearStatusBar();
+      isThinking = false; sendBtn.disabled = false;
+      resetToListening();
     }
   }
 
