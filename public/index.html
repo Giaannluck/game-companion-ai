@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Game Companion AI</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep:    #0a0806;
+      --bg-mid:     #110e0a;
+      --bg-panel:   #1a1510;
+      --bg-input:   #221c15;
+      --border:     #3d3020;
+      --border-glow:#7a5c2e;
+      --gold:       #c9972a;
+      --gold-light: #e8bb5a;
+      --gold-dim:   #6b4e1a;
+      --text-main:  #e8dcc8;
+      --text-dim:   #8a7a62;
+      --text-faint: #4a3f2f;
+      --red-ember:  #8b3a1a;
+      --user-bg:    #1e1710;
+      --ai-bg:      #141009;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-deep);
+      color: var(--text-main);
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 17px;
+      line-height: 1.6;
+      overflow: hidden;
+    }
+
+    /* Parchment noise overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.6;
+    }
+
+    #app {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 28px 14px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #0f0c08 0%, transparent 100%);
+      flex-shrink: 0;
+    }
+
+    .emblem {
+      width: 44px;
+      height: 44px;
+      border: 2px solid var(--gold-dim);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      background: radial-gradient(circle, #2a1f0f 0%, #0a0806 100%);
+      box-shadow: 0 0 12px rgba(201,151,42,0.15);
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--gold-light);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .header-text p {
+      font-size: 13px;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
+    .status-dot {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+      font-family: 'Cinzel', serif;
+      letter-spacing: 1px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4a7a3a;
+      box-shadow: 0 0 6px #4a7a3a;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+
+    .dot.thinking {
+      background: var(--gold);
+      box-shadow: 0 0 6px var(--gold);
+      animation: pulse-fast 0.8s ease-in-out infinite;
+    }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    @keyframes pulse-fast { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Game context bar ── */
+    #context-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 28px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #context-bar label {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      color: var(--gold-dim);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    #game-context-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-dim);
+      font-family: 'Crimson Pro', serif;
+      font-size: 14px;
+      font-style: italic;
+    }
+
+    #game-context-input::placeholder { color: var(--text-faint); }
+
+    /* ── Messages ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      scroll-behavior: smooth;
+    }
+
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      max-width: 88%;
+      animation: fadeUp 0.3s ease;
+      margin-bottom: 20px;
+    }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(8px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    .message.user { align-self: flex-end; align-items: flex-end; }
+    .message.ai   { align-self: flex-start; align-items: flex-start; }
+
+    .msg-label {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .message.user .msg-label { color: var(--gold-dim); }
+    .message.ai   .msg-label { color: var(--text-faint); }
+
+    .msg-bubble {
+      padding: 13px 18px;
+      border-radius: 2px;
+      line-height: 1.65;
+      font-size: 16px;
+      position: relative;
+    }
+
+    .message.user .msg-bubble {
+      background: var(--user-bg);
+      border: 1px solid var(--border);
+      border-right: 2px solid var(--gold-dim);
+      color: var(--text-main);
+    }
+
+    .message.ai .msg-bubble {
+      background: var(--ai-bg);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--red-ember);
+      color: var(--text-main);
+    }
+
+    /* Welcome message */
+    .welcome {
+      align-self: center;
+      text-align: center;
+      padding: 40px 20px;
+      max-width: 480px;
+    }
+
+    .welcome .rune {
+      font-size: 40px;
+      margin-bottom: 16px;
+      opacity: 0.7;
+    }
+
+    .welcome h2 {
+      font-family: 'Cinzel', serif;
+      font-size: 16px;
+      color: var(--gold);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .welcome p {
+      font-size: 15px;
+      color: var(--text-dim);
+      font-style: italic;
+      line-height: 1.7;
+    }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex;
+      gap: 5px;
+      padding: 14px 18px;
+      background: var(--ai-bg);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--red-ember);
+      border-radius: 2px;
+      width: fit-content;
+    }
+
+    .typing-indicator span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-faint);
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%,60%,100% { transform: translateY(0); background: var(--text-faint); }
+      30% { transform: translateY(-6px); background: var(--gold-dim); }
+    }
+
+    /* ── Input area ── */
+    #input-area {
+      padding: 16px 28px 20px;
+      border-top: 1px solid var(--border);
+      background: linear-gradient(0deg, #0a0806 0%, transparent 100%);
+      flex-shrink: 0;
+    }
+
+    #input-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 10px 14px;
+      transition: border-color 0.2s;
+    }
+
+    #input-row:focus-within {
+      border-color: var(--gold-dim);
+      box-shadow: 0 0 0 1px var(--gold-dim)20;
+    }
+
+    #user-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-main);
+      font-family: 'Crimson Pro', serif;
+      font-size: 16px;
+      resize: none;
+      max-height: 120px;
+      min-height: 24px;
+      line-height: 1.5;
+    }
+
+    #user-input::placeholder { color: var(--text-faint); font-style: italic; }
+
+    #send-btn {
+      background: none;
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      width: 36px;
+      height: 36px;
+      border-radius: 2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    #send-btn:hover:not(:disabled) {
+      background: var(--gold-dim);
+      color: var(--bg-deep);
+      box-shadow: 0 0 12px rgba(201,151,42,0.3);
+    }
+
+    #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .input-hint {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-top: 8px;
+      text-align: center;
+      font-family: 'Cinzel', serif;
+      letter-spacing: 1px;
+    }
+
+    /* Divider */
+    .day-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 8px 0 20px;
+      color: var(--text-faint);
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+    }
+
+    .day-divider::before, .day-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="emblem">⚔️</div>
+    <div class="header-text">
+      <h1>Game Companion</h1>
+      <p>Tu compañero de aventuras</p>
+    </div>
+    <div class="status-dot">
+      <div class="dot" id="status-dot"></div>
+      <span id="status-text">EN LÍNEA</span>
+    </div>
+  </header>
+
+  <div id="context-bar">
+    <label>Juego:</label>
+    <input id="game-context-input" type="text" placeholder="¿Qué estás jugando? (ej: Kingdom Come Deliverance 2, capítulo 3...)" />
+  </div>
+
+  <div id="messages">
+    <div class="welcome" id="welcome-msg">
+      <div class="rune">🏰</div>
+      <h2>Compañero listo</h2>
+      <p>Contame qué estás jugando y arrancamos la aventura juntos. Puedo comentar lo que pasa, darte consejos, o simplemente acompañarte.</p>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div id="input-row">
+      <textarea id="user-input" rows="1" placeholder="Contame qué está pasando en el juego..."></textarea>
+      <button id="send-btn" title="Enviar (Enter)">➤</button>
+    </div>
+    <div class="input-hint">ENTER para enviar · SHIFT+ENTER nueva línea</div>
+  </div>
+</div>
+
+<script>
+  const messagesEl = document.getElementById('messages');
+  const userInput  = document.getElementById('user-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const statusDot  = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const gameCtx    = document.getElementById('game-context-input');
+  const welcomeMsg = document.getElementById('welcome-msg');
+
+  let history = [];
+  let isThinking = false;
+
+  // Auto-resize textarea
+  userInput.addEventListener('input', () => {
+    userInput.style.height = 'auto';
+    userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+  });
+
+  // Enter to send
+  userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  function setThinking(val) {
+    isThinking = val;
+    sendBtn.disabled = val;
+    statusDot.className = 'dot' + (val ? ' thinking' : '');
+    statusText.textContent = val ? 'PENSANDO...' : 'EN LÍNEA';
+  }
+
+  function appendMessage(role, text) {
+    if (welcomeMsg) welcomeMsg.remove();
+
+    const wrap = document.createElement('div');
+    wrap.className = `message ${role}`;
+
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    label.textContent = role === 'user' ? 'Vos' : 'Compañero';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.textContent = text;
+
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return wrap;
+  }
+
+  function showTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'message ai';
+    wrap.id = 'typing-wrap';
+
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    label.textContent = 'Compañero';
+
+    const indicator = document.createElement('div');
+    indicator.className = 'typing-indicator';
+    indicator.innerHTML = '<span></span><span></span><span></span>';
+
+    wrap.appendChild(label);
+    wrap.appendChild(indicator);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typing-wrap');
+    if (el) el.remove();
+  }
+
+  async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text || isThinking) return;
+
+    userInput.value = '';
+    userInput.style.height = 'auto';
+
+    appendMessage('user', text);
+    history.push({ role: 'user', content: text });
+
+    setThinking(true);
+    showTyping();
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: history,
+          gameContext: gameCtx.value.trim() || null
+        })
+      });
+
+      const data = await res.json();
+      removeTyping();
+
+      if (data.error) {
+        appendMessage('ai', '⚠️ Error: ' + data.error);
+      } else {
+        appendMessage('ai', data.message);
+        history.push({ role: 'assistant', content: data.message });
+      }
+    } catch (err) {
+      removeTyping();
+      appendMessage('ai', '⚠️ No pude conectarme. Revisá tu conexión.');
+    }
+
+    setThinking(false);
+  }
+</script>
+</body>
+</html>
