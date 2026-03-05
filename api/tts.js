@@ -1,8 +1,10 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { text } = req.body;
-  if (!text) return res.status(400).json({ error: 'No text provided' });
+  const { text: rawText } = req.body;
+  if (!rawText) return res.status(400).json({ error: 'No text provided' });
+  // Recortar a 300 caracteres para ahorrar créditos — las respuestas deben ser cortas
+  const text = rawText.length > 300 ? rawText.slice(0, 297) + '...' : rawText;
 
   // Voice ID de Beto (argentino) — se puede cambiar
   const VOICE_ID = 'Vpv1YgvVd6CHIzOTiTt8'; // Voz peninsular medieval
