@@ -26,6 +26,23 @@
     .dot.listening{background:#4a9a6a;box-shadow:0 0 6px #4a9a6a;animation:pulse 1.5s ease-in-out infinite;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
     @keyframes pulse-fast{0%,100%{opacity:1}50%{opacity:0.3}}
+
+    /* Volume bar — visible, above messages */
+    #vol-bar{
+      height:6px;
+      background:var(--bg-panel);
+      border-bottom:1px solid var(--border);
+      flex-shrink:0;
+      display:none;
+    }
+    #vol-bar.active{ display:block; }
+    #vol-fill{
+      height:100%;
+      width:0%;
+      background: linear-gradient(90deg, #4a7a3a, #c9972a, #e05050);
+      transition:width 0.05s;
+    }
+
     #context-bar{display:flex;align-items:center;gap:10px;padding:8px 28px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-shrink:0;}
     #context-bar label{font-family:'Cinzel',serif;font-size:11px;color:var(--gold-dim);letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;}
     #game-context-input{flex:1;background:transparent;border:none;outline:none;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:14px;font-style:italic;}
@@ -70,10 +87,6 @@
     #voice-on{accent-color:var(--gold);cursor:pointer;}
     #status-bar{min-height:0;overflow:hidden;transition:all 0.2s;font-size:13px;color:var(--text-dim);font-style:italic;padding:0 28px;font-family:'Crimson Pro',serif;}
     #status-bar.visible{min-height:24px;padding:6px 28px;border-bottom:1px solid var(--border);background:var(--bg-panel);}
-
-    /* Volume visualizer */
-    #vol-bar{height:3px;background:var(--border);flex-shrink:0;transition:none;}
-    #vol-fill{height:100%;width:0%;background:var(--red-ember);transition:width 0.05s;}
   </style>
 </head>
 <body>
@@ -126,34 +139,31 @@
   const gameCtx    = document.getElementById('game-context-input');
   const voiceOn    = document.getElementById('voice-on');
   const statusBar  = document.getElementById('status-bar');
+  const volBar     = document.getElementById('vol-bar');
   const volFill    = document.getElementById('vol-fill');
 
-  let history      = [];
-  let isThinking   = false;
-  let isSpeaking   = false;
-  let callActive   = false;
+  let history     = [];
+  let isThinking  = false;
+  let isSpeaking  = false;
+  let callActive  = false;
 
-  // Recording state
-  let mediaRecorder  = null;
-  let audioChunks    = [];
-  let isRecording    = false;
-  let silenceTimer   = null;
-  let audioCtx       = null;
-  let analyser       = null;
-  let animFrame      = null;
-  let stream         = null;
-  let hasSpeech      = false;
+  let mediaRecorder = null;
+  let audioChunks   = [];
+  let isRecording   = false;
+  let silenceTimer  = null;
+  let audioCtx      = null;
+  let analyser      = null;
+  let animFrame     = null;
+  let stream        = null;
+  let hasSpeech     = false;
+  let volHistory    = [];
 
-  const SILENCE_THRESHOLD = 10;   // volumen mínimo para considerar voz
-  const SILENCE_DELAY     = 2000; // ms de silencio antes de enviar
+  const SILENCE_DELAY = 2000;
 
   // ── CALL TOGGLE ──
   micBtn.addEventListener('click', async () => {
-    if (callActive) {
-      endCall();
-    } else {
-      await startCall();
-    }
+    if (callActive) endCall();
+    else await startCall();
   });
 
   async function startCall() {
@@ -163,6 +173,7 @@
       micBtn.classList.add('active');
       micBtn.textContent = '📵';
       micBtn.title = 'Click para colgar';
+      volBar.classList.add('active');
       setStatus('listening', 'ESCUCHANDO...');
       setStatusBar('🎙 Escuchando... hablá cuando quieras');
       setupAudioAnalyser(stream);
@@ -174,46 +185,62 @@
 
   function endCall() {
     callActive = false;
-    stopListening(false); // false = no enviar
+    stopListening(false);
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
     clearTimeout(silenceTimer);
+    silenceTimer = null;
     micBtn.classList.remove('active');
     micBtn.textContent = '🎤';
     micBtn.title = 'Click para iniciar llamada';
+    volBar.classList.remove('active');
     volFill.style.width = '0%';
     setStatus('online', 'EN LÍNEA');
     clearStatusBar();
     window.speechSynthesis.cancel();
   }
 
-  // ── AUDIO ANALYSER (visualizer + silence detection) ──
+  // ── AUDIO ANALYSER ──
   function setupAudioAnalyser(stream) {
-    audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-    analyser  = audioCtx.createAnalyser();
-    analyser.fftSize = 512;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.3;
     const source = audioCtx.createMediaStreamSource(stream);
     source.connect(analyser);
     monitorVolume();
   }
 
-  function monitorVolume() {
-    if (!analyser) return;
+  function getVolume() {
     const data = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(data);
-    const vol = data.reduce((a, b) => a + b, 0) / data.length;
-    volFill.style.width = Math.min(vol * 3, 100) + '%';
+    // Solo mirar frecuencias de voz (aprox 100hz-3000hz)
+    const start = Math.floor(100 / (audioCtx.sampleRate / analyser.fftSize));
+    const end   = Math.floor(3000 / (audioCtx.sampleRate / analyser.fftSize));
+    let sum = 0;
+    for (let i = start; i < end; i++) sum += data[i];
+    return sum / (end - start);
+  }
+
+  function monitorVolume() {
+    if (!analyser) return;
+    const vol = getVolume();
+    const pct = Math.min(vol * 2, 100);
+    volFill.style.width = pct + '%';
 
     if (callActive && !isThinking && !isSpeaking) {
-      if (vol > SILENCE_THRESHOLD) {
-        if (!isRecording) startListening();
+      if (vol > 8) {
+        // Hay voz
         hasSpeech = true;
         clearTimeout(silenceTimer);
-      } else if (isRecording && hasSpeech) {
-        clearTimeout(silenceTimer);
+        silenceTimer = null;
+        if (!isRecording) startListening();
+      } else if (isRecording && hasSpeech && !silenceTimer) {
+        // Silencio después de haber hablado — iniciar countdown
         silenceTimer = setTimeout(() => {
-          if (isRecording) stopListening(true);
+          silenceTimer = null;
+          if (isRecording && hasSpeech) stopListening(true);
         }, SILENCE_DELAY);
       }
     }
@@ -226,12 +253,18 @@
     if (isRecording || !stream) return;
     audioChunks = [];
     hasSpeech   = false;
+
     const mimeType = MediaRecorder.isTypeSupported('audio/wav')  ? 'audio/wav'  :
                      MediaRecorder.isTypeSupported('audio/ogg')  ? 'audio/ogg'  : 'audio/webm';
-    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    try {
+      mediaRecorder = new MediaRecorder(stream, { mimeType });
+    } catch(e) {
+      mediaRecorder = new MediaRecorder(stream);
+    }
+
     mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = async () => {
-      if (hasSpeech && callActive) {
+      if (hasSpeech && callActive && !isThinking) {
         const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
         await transcribeAndSend(blob);
       } else if (callActive && !isThinking) {
@@ -239,15 +272,17 @@
         setStatusBar('🎙 Escuchando...');
       }
     };
-    mediaRecorder.start();
+
+    mediaRecorder.start(100); // chunk cada 100ms
     isRecording = true;
     setStatus('recording', 'GRABANDO...');
   }
 
   function stopListening(send) {
     clearTimeout(silenceTimer);
+    silenceTimer = null;
+    if (!send) hasSpeech = false;
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      if (!send) hasSpeech = false; // evitar que onstop envíe
       mediaRecorder.stop();
     }
     isRecording = false;
@@ -275,10 +310,9 @@
 
   function resetToListening() {
     if (callActive) {
-      setTimeout(() => {
-        setStatus('listening', 'ESCUCHANDO...');
-        setStatusBar('🎙 Escuchando...');
-      }, 1500);
+      setStatus('listening', 'ESCUCHANDO...');
+      setStatusBar('🎙 Escuchando...');
+      startListening();
     }
   }
 
@@ -356,7 +390,7 @@
   }
 
   function finishThinking() {
-    isThinking   = false;
+    isThinking = false;
     sendBtn.disabled = false;
     if (callActive) {
       setStatus('listening', 'ESCUCHANDO...');
@@ -368,9 +402,9 @@
     }
   }
 
-  // ── STATUS HELPERS ──
+  // ── STATUS ──
   function setStatus(type, text) {
-    const map = { online: 'dot', thinking: 'dot thinking', recording: 'dot recording', listening: 'dot listening' };
+    const map = { online:'dot', thinking:'dot thinking', recording:'dot recording', listening:'dot listening' };
     statusDot.className = map[type] || 'dot';
     statusText.textContent = text;
   }
@@ -381,9 +415,9 @@
   function appendMessage(role, text) {
     const welcome = document.getElementById('welcome-msg');
     if (welcome) welcome.remove();
-    const wrap   = document.createElement('div');
+    const wrap = document.createElement('div');
     wrap.className = `message ${role}`;
-    const label  = document.createElement('div');
+    const label = document.createElement('div');
     label.className = 'msg-label';
     label.textContent = role === 'user' ? 'Vos' : 'Compañero';
     const bubble = document.createElement('div');
@@ -395,11 +429,11 @@
   }
 
   function showTyping() {
-    const wrap  = document.createElement('div');
+    const wrap = document.createElement('div');
     wrap.className = 'message ai'; wrap.id = 'typing-wrap';
     const label = document.createElement('div');
     label.className = 'msg-label'; label.textContent = 'Compañero';
-    const ind   = document.createElement('div');
+    const ind = document.createElement('div');
     ind.className = 'typing-indicator';
     ind.innerHTML = '<span></span><span></span><span></span>';
     wrap.appendChild(label); wrap.appendChild(ind);
