@@ -22,16 +22,19 @@
     .status-dot{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim);font-family:'Cinzel',serif;letter-spacing:1px;}
     .dot{width:8px;height:8px;border-radius:50%;background:#4a7a3a;box-shadow:0 0 6px #4a7a3a;animation:pulse 2.5s ease-in-out infinite;}
     .dot.thinking{background:var(--gold);box-shadow:0 0 6px var(--gold);animation:pulse-fast 0.8s ease-in-out infinite;}
-    .dot.recording{background:#e05050;box-shadow:0 0 6px #e05050;animation:pulse-fast 0.8s ease-in-out infinite;}
+    .dot.recording{background:#e05050;box-shadow:0 0 6px #e05050;animation:pulse-fast 0.6s ease-in-out infinite;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
     @keyframes pulse-fast{0%,100%{opacity:1}50%{opacity:0.3}}
+
     #context-bar{display:flex;align-items:center;gap:10px;padding:8px 28px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-shrink:0;}
     #context-bar label{font-family:'Cinzel',serif;font-size:11px;color:var(--gold-dim);letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;}
     #game-context-input{flex:1;background:transparent;border:none;outline:none;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:14px;font-style:italic;}
     #game-context-input::placeholder{color:var(--text-faint);}
+
     #messages{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:0;scroll-behavior:smooth;}
     #messages::-webkit-scrollbar{width:4px;}
     #messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
     .message{display:flex;flex-direction:column;max-width:88%;animation:fadeUp 0.3s ease;margin-bottom:20px;}
     @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     .message.user{align-self:flex-end;align-items:flex-end;}
@@ -42,31 +45,58 @@
     .msg-bubble{padding:13px 18px;border-radius:2px;line-height:1.65;font-size:16px;}
     .message.user .msg-bubble{background:var(--user-bg);border:1px solid var(--border);border-right:2px solid var(--gold-dim);}
     .message.ai .msg-bubble{background:var(--ai-bg);border:1px solid var(--border);border-left:2px solid var(--red-ember);}
+
     .welcome{align-self:center;text-align:center;padding:40px 20px;max-width:480px;}
     .welcome .rune{font-size:40px;margin-bottom:16px;opacity:0.7;}
     .welcome h2{font-family:'Cinzel',serif;font-size:16px;color:var(--gold);letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;}
     .welcome p{font-size:15px;color:var(--text-dim);font-style:italic;line-height:1.7;}
+
     .typing-indicator{display:flex;gap:5px;padding:14px 18px;background:var(--ai-bg);border:1px solid var(--border);border-left:2px solid var(--red-ember);border-radius:2px;width:fit-content;}
     .typing-indicator span{width:6px;height:6px;border-radius:50%;background:var(--text-faint);animation:bounce 1.2s ease-in-out infinite;}
     .typing-indicator span:nth-child(2){animation-delay:0.2s;}
     .typing-indicator span:nth-child(3){animation-delay:0.4s;}
     @keyframes bounce{0%,60%,100%{transform:translateY(0);background:var(--text-faint)}30%{transform:translateY(-6px);background:var(--gold-dim)}}
+
+    /* ── Input area ── */
     #input-area{padding:16px 28px 20px;border-top:1px solid var(--border);background:linear-gradient(0deg,#0a0806 0%,transparent 100%);flex-shrink:0;}
     #input-row{display:flex;align-items:flex-end;gap:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:3px;padding:10px 14px;transition:border-color 0.2s;}
     #input-row:focus-within{border-color:var(--gold-dim);}
     #user-input{flex:1;background:transparent;border:none;outline:none;color:var(--text-main);font-family:'Crimson Pro',serif;font-size:16px;resize:none;max-height:120px;min-height:24px;line-height:1.5;}
     #user-input::placeholder{color:var(--text-faint);font-style:italic;}
     #send-btn{background:none;border:1px solid var(--gold-dim);color:var(--gold);width:36px;height:36px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all 0.2s;flex-shrink:0;}
-    #send-btn:hover:not(:disabled){background:var(--gold-dim);color:var(--bg-deep);box-shadow:0 0 12px rgba(201,151,42,0.3);}
+    #send-btn:hover:not(:disabled){background:var(--gold-dim);color:var(--bg-deep);}
     #send-btn:disabled{opacity:0.3;cursor:not-allowed;}
+
+    /* ── Mic call button ── */
     #mic-btn{background:none;border:1px solid var(--border);color:var(--text-dim);width:36px;height:36px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all 0.2s;flex-shrink:0;}
     #mic-btn:hover:not(:disabled){border-color:var(--gold-dim);color:var(--gold);}
-    #mic-btn.recording{border-color:#8b1a1a;color:#e05050;box-shadow:0 0 12px rgba(200,50,50,0.4);animation:pulse-fast 0.8s ease-in-out infinite;}
+    #mic-btn.active{border-color:#8b1a1a !important;color:#e05050 !important;box-shadow:0 0 16px rgba(200,50,50,0.5);animation:pulse-fast 0.8s ease-in-out infinite;}
     #mic-btn:disabled{opacity:0.3;cursor:not-allowed;}
+
     .input-hint{font-size:11px;color:var(--text-faint);margin-top:8px;text-align:center;font-family:'Cinzel',serif;letter-spacing:1px;}
+
+    /* Voice toggle */
     #voice-toggle{display:flex;align-items:center;gap:8px;margin-left:auto;}
     #voice-toggle label{font-family:'Cinzel',serif;font-size:10px;color:var(--text-faint);letter-spacing:1px;cursor:pointer;}
     #voice-on{accent-color:var(--gold);cursor:pointer;}
+
+    /* Interim transcript preview */
+    #interim-bar{
+      min-height:0;
+      overflow:hidden;
+      transition:all 0.2s;
+      font-size:13px;
+      color:var(--text-dim);
+      font-style:italic;
+      padding:0 28px;
+      font-family:'Crimson Pro',serif;
+    }
+    #interim-bar.visible{
+      min-height:24px;
+      padding:6px 28px;
+      border-bottom:1px solid var(--border);
+      background:var(--bg-panel);
+    }
   </style>
 </head>
 <body>
@@ -78,7 +108,7 @@
       <p>Tu compañero de aventuras</p>
     </div>
     <div id="voice-toggle">
-      <input type="checkbox" id="voice-on" checked title="Activar respuesta por voz"/>
+      <input type="checkbox" id="voice-on" checked/>
       <label for="voice-on">VOZ</label>
     </div>
     <div class="status-dot">
@@ -86,162 +116,282 @@
       <span id="status-text">EN LÍNEA</span>
     </div>
   </header>
+
   <div id="context-bar">
     <label>Juego:</label>
-    <input id="game-context-input" type="text" placeholder="¿Qué estás jugando? (ej: Kingdom Come Deliverance 2, capítulo 3...)"/>
+    <input id="game-context-input" type="text" placeholder="¿Qué estás jugando? (ej: Kingdom Come Deliverance 2...)"/>
   </div>
+
+  <div id="interim-bar"></div>
+
   <div id="messages">
     <div class="welcome" id="welcome-msg">
       <div class="rune">🏰</div>
       <h2>Compañero listo</h2>
-      <p>Contame qué estás jugando y arrancamos la aventura juntos. Podés escribir o usar el micrófono 🎤</p>
+      <p>Escribí o tocá el micrófono para hablar. El micrófono queda abierto como una llamada hasta que lo apagues.</p>
     </div>
   </div>
+
   <div id="input-area">
     <div id="input-row">
-      <button id="mic-btn" title="Click para hablar">🎤</button>
+      <button id="mic-btn" title="Click para activar/desactivar micrófono">🎤</button>
       <textarea id="user-input" rows="1" placeholder="Contame qué está pasando en el juego..."></textarea>
       <button id="send-btn" title="Enviar (Enter)">➤</button>
     </div>
-    <div class="input-hint">🎤 Click para hablar · ENTER para enviar · SHIFT+ENTER nueva línea</div>
+    <div class="input-hint">🎤 Click para llamada de voz · ENTER para enviar texto</div>
   </div>
 </div>
+
 <script>
-  const messagesEl=document.getElementById('messages');
-  const userInput=document.getElementById('user-input');
-  const sendBtn=document.getElementById('send-btn');
-  const micBtn=document.getElementById('mic-btn');
-  const statusDot=document.getElementById('status-dot');
-  const statusText=document.getElementById('status-text');
-  const gameCtx=document.getElementById('game-context-input');
-  const voiceOn=document.getElementById('voice-on');
-  let history=[],isThinking=false,isRecording=false,recognition=null;
+  const messagesEl  = document.getElementById('messages');
+  const userInput   = document.getElementById('user-input');
+  const sendBtn     = document.getElementById('send-btn');
+  const micBtn      = document.getElementById('mic-btn');
+  const statusDot   = document.getElementById('status-dot');
+  const statusText  = document.getElementById('status-text');
+  const gameCtx     = document.getElementById('game-context-input');
+  const voiceOn     = document.getElementById('voice-on');
+  const interimBar  = document.getElementById('interim-bar');
 
-  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(SpeechRecognition){
-    recognition=new SpeechRecognition();
-    recognition.lang='es-AR';
-    recognition.continuous=false;
-    recognition.interimResults=false;
-    recognition.onresult=(e)=>{
-      userInput.value=e.results[0][0].transcript;
-      stopRecording();
-      sendMessage();
-    };
-    recognition.onerror=()=>stopRecording();
-    recognition.onend=()=>{ if(isRecording) stopRecording(); };
+  let history      = [];
+  let isThinking   = false;
+  let callActive   = false;   // micrófono abierto como llamada
+  let isSpeaking   = false;   // la IA está hablando
+  let recognition  = null;
+
+  // ── Speech Recognition ──
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SR) {
+    micBtn.disabled = true;
+    micBtn.title = 'Tu navegador no soporta voz. Usá Chrome o Brave.';
   } else {
-    micBtn.disabled=true;
-    micBtn.title='Tu navegador no soporta voz. Usá Chrome.';
+    setupRecognition();
   }
 
-  function startRecording(){
-    if(!recognition||isThinking)return;
-    isRecording=true;
-    micBtn.classList.add('recording');
-    micBtn.textContent='🔴';
-    statusDot.className='dot recording';
-    statusText.textContent='ESCUCHANDO...';
-    recognition.start();
+  function setupRecognition() {
+    recognition = new SR();
+    recognition.lang = 'es-AR';
+    recognition.continuous = true;       // escucha indefinida
+    recognition.interimResults = true;   // muestra texto mientras hablás
+
+    recognition.onresult = (e) => {
+      let interim = '';
+      let final   = '';
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          final += e.results[i][0].transcript;
+        } else {
+          interim += e.results[i][0].transcript;
+        }
+      }
+
+      // Mostrar texto interim en la barra
+      if (interim) {
+        interimBar.textContent = '🎙 ' + interim;
+        interimBar.classList.add('visible');
+      }
+
+      // Cuando termina una frase, enviar
+      if (final.trim()) {
+        interimBar.textContent = '';
+        interimBar.classList.remove('visible');
+        sendVoiceMessage(final.trim());
+      }
+    };
+
+    recognition.onerror = (e) => {
+      // 'no-speech' es normal, no cortamos la llamada
+      if (e.error === 'no-speech') return;
+      console.error('Speech error:', e.error);
+    };
+
+    recognition.onend = () => {
+      // Si la llamada sigue activa y no estamos procesando, reiniciar
+      if (callActive && !isThinking) {
+        try { recognition.start(); } catch(e) {}
+      }
+    };
   }
 
-  function stopRecording(){
-    isRecording=false;
-    micBtn.classList.remove('recording');
-    micBtn.textContent='🎤';
-    if(!isThinking){statusDot.className='dot';statusText.textContent='EN LÍNEA';}
-    try{recognition.stop();}catch(e){}
+  // ── Activar/desactivar llamada ──
+  micBtn.addEventListener('click', () => {
+    if (!SR) return;
+    if (callActive) {
+      endCall();
+    } else {
+      startCall();
+    }
+  });
+
+  function startCall() {
+    callActive = true;
+    micBtn.classList.add('active');
+    micBtn.textContent = '📵';
+    micBtn.title = 'Click para colgar';
+    statusDot.className = 'dot recording';
+    statusText.textContent = 'ESCUCHANDO...';
+    try { recognition.start(); } catch(e) {}
   }
 
-  micBtn.addEventListener('click',()=>{ if(isRecording) stopRecording(); else startRecording(); });
-
-  function speak(text){
-    if(!voiceOn.checked)return;
+  function endCall() {
+    callActive = false;
+    micBtn.classList.remove('active');
+    micBtn.textContent = '🎤';
+    micBtn.title = 'Click para activar micrófono';
+    interimBar.textContent = '';
+    interimBar.classList.remove('visible');
+    if (!isThinking) {
+      statusDot.className = 'dot';
+      statusText.textContent = 'EN LÍNEA';
+    }
+    try { recognition.stop(); } catch(e) {}
     window.speechSynthesis.cancel();
-    const utter=new SpeechSynthesisUtterance(text);
-    utter.lang='es-AR';utter.rate=1.05;utter.pitch=0.95;
-    const voices=window.speechSynthesis.getVoices();
-    const esVoice=voices.find(v=>v.lang.startsWith('es'));
-    if(esVoice)utter.voice=esVoice;
+  }
+
+  // ── Text to Speech ──
+  function speak(text, onEnd) {
+    if (!voiceOn.checked) { if(onEnd) onEnd(); return; }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'es-AR';
+    utter.rate = 1.05;
+    utter.pitch = 0.95;
+    const voices = window.speechSynthesis.getVoices();
+    const esVoice = voices.find(v => v.lang.startsWith('es'));
+    if (esVoice) utter.voice = esVoice;
+    isSpeaking = true;
+
+    // Pausar reconocimiento mientras habla la IA (evita que se escuche a sí misma)
+    if (callActive) try { recognition.stop(); } catch(e) {}
+
+    utter.onend = () => {
+      isSpeaking = false;
+      if (onEnd) onEnd();
+      // Retomar escucha después de que termina de hablar
+      if (callActive) {
+        statusDot.className = 'dot recording';
+        statusText.textContent = 'ESCUCHANDO...';
+        setTimeout(() => {
+          try { recognition.start(); } catch(e) {}
+        }, 300);
+      }
+    };
     window.speechSynthesis.speak(utter);
   }
-  window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();
 
-  userInput.addEventListener('input',()=>{
-    userInput.style.height='auto';
-    userInput.style.height=Math.min(userInput.scrollHeight,120)+'px';
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+
+  // ── Envío por voz ──
+  async function sendVoiceMessage(text) {
+    if (isThinking || !text) return;
+    // Pausar reconocimiento mientras procesa
+    try { recognition.stop(); } catch(e) {}
+    statusDot.className = 'dot thinking';
+    statusText.textContent = 'PENSANDO...';
+    await processMessage(text);
+  }
+
+  // ── Envío por texto ──
+  userInput.addEventListener('input', () => {
+    userInput.style.height = 'auto';
+    userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
   });
-  userInput.addEventListener('keydown',(e)=>{
-    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+  userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); }
   });
-  sendBtn.addEventListener('click',sendMessage);
+  sendBtn.addEventListener('click', sendTextMessage);
 
-  function setThinking(val){
-    isThinking=val;sendBtn.disabled=val;micBtn.disabled=val;
-    statusDot.className='dot'+(val?' thinking':'');
-    statusText.textContent=val?'PENSANDO...':'EN LÍNEA';
+  function sendTextMessage() {
+    const text = userInput.value.trim();
+    if (!text || isThinking) return;
+    userInput.value = '';
+    userInput.style.height = 'auto';
+    processMessage(text);
   }
 
-  function appendMessage(role,text){
-    const welcome=document.getElementById('welcome-msg');
-    if(welcome)welcome.remove();
-    const wrap=document.createElement('div');
-    wrap.className=`message ${role}`;
-    const label=document.createElement('div');
-    label.className='msg-label';
-    label.textContent=role==='user'?'Vos':'Compañero';
-    const bubble=document.createElement('div');
-    bubble.className='msg-bubble';
-    bubble.textContent=text;
-    wrap.appendChild(label);wrap.appendChild(bubble);
-    messagesEl.appendChild(wrap);
-    messagesEl.scrollTop=messagesEl.scrollHeight;
-  }
+  // ── Core: procesar mensaje y obtener respuesta ──
+  async function processMessage(text) {
+    if (isThinking) return;
+    isThinking = true;
+    sendBtn.disabled = true;
 
-  function showTyping(){
-    const wrap=document.createElement('div');
-    wrap.className='message ai';wrap.id='typing-wrap';
-    const label=document.createElement('div');
-    label.className='msg-label';label.textContent='Compañero';
-    const ind=document.createElement('div');
-    ind.className='typing-indicator';
-    ind.innerHTML='<span></span><span></span><span></span>';
-    wrap.appendChild(label);wrap.appendChild(ind);
-    messagesEl.appendChild(wrap);
-    messagesEl.scrollTop=messagesEl.scrollHeight;
-  }
+    appendMessage('user', text);
+    history.push({ role: 'user', content: text });
+    showTyping();
 
-  function removeTyping(){
-    const el=document.getElementById('typing-wrap');
-    if(el)el.remove();
-  }
-
-  async function sendMessage(){
-    const text=userInput.value.trim();
-    if(!text||isThinking)return;
-    userInput.value='';userInput.style.height='auto';
-    appendMessage('user',text);
-    history.push({role:'user',content:text});
-    setThinking(true);showTyping();
-    try{
-      const res=await fetch('/api/chat',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({messages:history,gameContext:gameCtx.value.trim()||null})
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history, gameContext: gameCtx.value.trim() || null })
       });
-      const data=await res.json();
+      const data = await res.json();
       removeTyping();
-      if(data.error){appendMessage('ai','⚠️ Error: '+data.error);}
-      else{
-        appendMessage('ai',data.message);
-        history.push({role:'assistant',content:data.message});
-        speak(data.message);
+
+      if (data.error) {
+        appendMessage('ai', '⚠️ Error: ' + data.error);
+        finishThinking();
+      } else {
+        appendMessage('ai', data.message);
+        history.push({ role: 'assistant', content: data.message });
+        speak(data.message, () => finishThinking());
+        if (!voiceOn.checked) finishThinking();
       }
-    }catch(err){
+    } catch (err) {
       removeTyping();
-      appendMessage('ai','⚠️ No pude conectarme. Revisá tu conexión.');
+      appendMessage('ai', '⚠️ No pude conectarme.');
+      finishThinking();
     }
-    setThinking(false);
+  }
+
+  function finishThinking() {
+    isThinking = false;
+    sendBtn.disabled = false;
+    if (callActive) {
+      statusDot.className = 'dot recording';
+      statusText.textContent = 'ESCUCHANDO...';
+    } else {
+      statusDot.className = 'dot';
+      statusText.textContent = 'EN LÍNEA';
+    }
+  }
+
+  // ── UI helpers ──
+  function appendMessage(role, text) {
+    const welcome = document.getElementById('welcome-msg');
+    if (welcome) welcome.remove();
+    const wrap = document.createElement('div');
+    wrap.className = `message ${role}`;
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    label.textContent = role === 'user' ? 'Vos' : 'Compañero';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.textContent = text;
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function showTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'message ai'; wrap.id = 'typing-wrap';
+    const label = document.createElement('div');
+    label.className = 'msg-label'; label.textContent = 'Compañero';
+    const ind = document.createElement('div');
+    ind.className = 'typing-indicator';
+    ind.innerHTML = '<span></span><span></span><span></span>';
+    wrap.appendChild(label); wrap.appendChild(ind);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typing-wrap');
+    if (el) el.remove();
   }
 </script>
 </body>
