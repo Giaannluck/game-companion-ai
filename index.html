@@ -402,14 +402,16 @@
     isRecording = false;
     isWaitingVoice = false;
     silentFrames = 0; voiceFrames = 0;
-    mediaRecorder.onstop = async () => {
+    // Asignar onstop PRIMERO, después parar
+    mediaRecorder.addEventListener('stop', async () => {
       if (!callActive) return;
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
       if (blob.size < 1000) { resetToListening(); return; }
       await transcribeAndSend(blob);
-    };
+    }, { once: true });
+    mediaRecorder.requestData(); // fuerza el último dataavailable
     mediaRecorder.stop();
-  }
+}
 
   function abortRecording() {
     clearTimeout(silenceTimer); silenceTimer = null;
