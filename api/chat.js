@@ -171,8 +171,8 @@ ESTILO DE RESPUESTA
 
   // Modelo con visión vs sin visión
   // Llama 4 Maverick tiene visión nativa — usarlo para todo, con Scout como fallback
-  const model = 'qwen/qwen2.5-vl-72b-instruct:free';
-  const fallbackModel = 'meta-llama/llama-4-scout:free';
+  const model = imageBase64 ? 'google/gemma-3-27b-it:free' : 'mistralai/mistral-small-3.1-24b-instruct:free';
+  const fallbackModel = 'google/gemma-3-12b-it:free';
 
   const makeRequest = async (modelToUse) => {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
