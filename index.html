@@ -169,35 +169,31 @@
     setupRecognition();
   }
 
-  function setupRecognition() {
+function setupRecognition() {
     recognition = new SR();
-    recognition.lang = 'es-AR';
+    recognition.lang = 'es-ES';
     recognition.continuous = false;
-    recognition.interimResults = true;
+    recognition.interimResults = false;
 
     recognition.onresult = (e) => {
-      let interim = '';
-      let final   = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      if (interim) {
-        interimBar.textContent = '🎙 ' + interim;
-        interimBar.classList.add('visible');
-      }
-      if (final.trim()) {
-        interimBar.textContent = '';
-        interimBar.classList.remove('visible');
-        sendVoiceMessage(final.trim());
-      }
+      const transcript = e.results[e.results.length - 1][0].transcript.trim();
+      interimBar.textContent = '';
+      interimBar.classList.remove('visible');
+      if (transcript) sendVoiceMessage(transcript);
     };
 
     recognition.onerror = (e) => {
       if (e.error === 'no-speech' && callActive && !isThinking) {
-        try { recognition.start(); } catch(e) {}
+        setTimeout(() => { try { recognition.start(); } catch(e) {} }, 200);
       }
     };
+
+    recognition.onend = () => {
+      if (callActive && !isThinking && !isSpeaking) {
+        setTimeout(() => { try { recognition.start(); } catch(e) {} }, 200);
+      }
+    };
+  }
 
     recognition.onend = () => {
       if (callActive && !isThinking && !isSpeaking) {
