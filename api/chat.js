@@ -171,7 +171,7 @@ ESTILO DE RESPUESTA
 
   // Modelo con visión vs sin visión
   // Llama 4 Maverick tiene visión nativa — usarlo para todo, con Scout como fallback
-  const model = 'meta-llama/llama-4-maverick:free';
+  const model = 'qwen/qwen2.5-vl-72b-instruct:free';
   const fallbackModel = 'meta-llama/llama-4-scout:free';
 
   const makeRequest = async (modelToUse) => {
