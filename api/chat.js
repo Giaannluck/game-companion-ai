@@ -170,12 +170,12 @@ ESTILO DE RESPUESTA
   ];
 
   // Modelo con visión vs sin visión
-  const model = imageBase64
-    ? 'qwen/qwen2.5-vl-72b-instruct:free'   // visión — Qwen 72B gratis
-    : 'meta-llama/llama-4-maverick:free';    // chat — Llama 4 Maverick gratis
+  // Llama 4 Maverick tiene visión nativa — usarlo para todo, con Scout como fallback
+  const model = 'meta-llama/llama-4-maverick:free';
+  const fallbackModel = 'meta-llama/llama-4-scout:free';
 
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const makeRequest = async (modelToUse) => {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -184,7 +184,7 @@ ESTILO DE RESPUESTA
         'X-Title': 'Game Companion AI',
       },
       body: JSON.stringify({
-        model,
+        model: modelToUse,
         messages: [
           { role: 'system', content: systemPrompt },
           ...apiMessages
@@ -193,9 +193,19 @@ ESTILO DE RESPUESTA
         temperature: 0.85,
       }),
     });
+    const d = await r.json();
+    return { ok: r.ok, data: d };
+  };
 
-    const data = await response.json();
-    if (!response.ok) return res.status(500).json({ error: data.error?.message || 'Error OpenRouter' });
+  try {
+    let { ok, data } = await makeRequest(model);
+
+    // Si el modelo principal falla, intentar con Scout como fallback
+    if (!ok || data.error) {
+      ({ ok, data } = await makeRequest(fallbackModel));
+    }
+
+    if (!ok || data.error) return res.status(500).json({ error: data.error?.message || 'Error OpenRouter' });
     return res.status(200).json({ message: data.choices[0].message.content });
   } catch (error) {
     return res.status(500).json({ error: error.message });
