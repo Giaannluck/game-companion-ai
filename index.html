@@ -74,6 +74,10 @@
     #mic-btn.active{border-color:#8b1a1a !important;color:#e05050 !important;box-shadow:0 0 16px rgba(200,50,50,0.5);}
     #screen-btn.active{border-color:#1a8b1a !important;color:#4aaa4a !important;box-shadow:0 0 16px rgba(50,200,50,0.3);}
     #mic-btn:disabled,#screen-btn:disabled{opacity:0.3;cursor:not-allowed;}
+    #ptt-btn{background:none;border:1px solid var(--border);color:var(--text-dim);width:36px;height:36px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.2s;flex-shrink:0;user-select:none;}
+    #ptt-btn:hover:not(:disabled){border-color:var(--gold-dim);color:var(--gold);}
+    #ptt-btn.active{border-color:#e05050 !important;color:#e05050 !important;box-shadow:0 0 16px rgba(200,50,50,0.5);background:#1a0808;}
+    #ptt-btn:disabled{opacity:0.3;cursor:not-allowed;}
     .input-hint{font-size:11px;color:var(--text-faint);margin-top:8px;text-align:center;font-family:'Cinzel',serif;letter-spacing:1px;}
     #voice-toggle{display:flex;align-items:center;gap:8px;margin-left:auto;}
     #voice-toggle label{font-family:'Cinzel',serif;font-size:10px;color:var(--text-faint);letter-spacing:1px;cursor:pointer;}
@@ -124,6 +128,7 @@
   <div id="input-area">
     <div id="input-row">
       <button id="mic-btn" title="Llamada de voz">🎤</button>
+      <button id="ptt-btn" title="Mantené apretado para hablar" disabled>🔴</button>
       <button id="screen-btn" title="Compartir pantalla">🖥</button>
       <textarea id="user-input" rows="1" placeholder="O escribí acá..."></textarea>
       <button id="send-btn" title="Enviar (Enter)">➤</button>
@@ -290,6 +295,7 @@
       callActive = true;
       micBtn.classList.add('active');
       micBtn.textContent = '📵';
+      document.getElementById('ptt-btn').disabled = false;
       micBtn.title = 'Click para colgar';
       volBar.classList.add('active');
       setStatus('listening', 'CALIBRANDO...');
@@ -417,7 +423,13 @@
     isRecording = false;
     isWaitingVoice = false;
     silentFrames = 0; voiceFrames = 0;
+    // Timeout de seguridad por si el evento stop no dispara
+    const stopTimeout = setTimeout(() => {
+      console.warn('⚠️ stop no disparó, forzando resetToListening');
+      resetToListening();
+    }, 3000);
     mediaRecorder.addEventListener('stop', async () => {
+      clearTimeout(stopTimeout);
       if (!callActive) return;
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
       if (blob.size < 1000) { resetToListening(); return; }
@@ -496,14 +508,13 @@
       const url = URL.createObjectURL(blob);
       currentAudio = new Audio(url);
       currentAudio.volume = parseFloat(volumeSlider.value);
-      currentAudio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; finish(); };
-      currentAudio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; finish(); };
-      // Timeout de seguridad 30s
+      // Timeout de seguridad 30s por si onended no dispara
       const safetyTimer = setTimeout(() => {
         if (currentAudio) { currentAudio.pause(); currentAudio = null; }
         finish();
       }, 30000);
       currentAudio.onended = () => { clearTimeout(safetyTimer); URL.revokeObjectURL(url); currentAudio = null; finish(); };
+      currentAudio.onerror = () => { clearTimeout(safetyTimer); URL.revokeObjectURL(url); currentAudio = null; finish(); };
       await currentAudio.play();
     } catch (err) {
       console.warn('🔊 Error TTS:', err.message);
@@ -537,6 +548,32 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); }
   });
   sendBtn.addEventListener('click', sendTextMessage);
+
+  // ── PUSH TO TALK ──
+  const pttBtn = document.getElementById('ptt-btn');
+  let pttActive = false;
+
+  const pttStart = () => {
+    if (!callActive || isThinking || pttActive) return;
+    pttActive = true;
+    pttBtn.classList.add('active');
+    clearTimeout(silenceTimer); silenceTimer = null;
+    isWaitingVoice = false;
+    if (!isRecording) beginRecording();
+  };
+
+  const pttStop = () => {
+    if (!pttActive) return;
+    pttActive = false;
+    pttBtn.classList.remove('active');
+    if (isRecording) finishRecording();
+  };
+
+  pttBtn.addEventListener('mousedown', pttStart);
+  pttBtn.addEventListener('mouseup', pttStop);
+  pttBtn.addEventListener('mouseleave', pttStop);
+  pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); pttStart(); });
+  pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); pttStop(); });
 
   function sendTextMessage() {
     const text = userInput.value.trim();
