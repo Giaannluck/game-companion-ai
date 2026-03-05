@@ -67,8 +67,8 @@
     #voice-toggle{display:flex;align-items:center;gap:8px;margin-left:auto;}
     #voice-toggle label{font-family:'Cinzel',serif;font-size:10px;color:var(--text-faint);letter-spacing:1px;cursor:pointer;}
     #voice-on{accent-color:var(--gold);cursor:pointer;}
-    #interim-bar{min-height:0;overflow:hidden;transition:all 0.2s;font-size:13px;color:var(--text-dim);font-style:italic;padding:0 28px;font-family:'Crimson Pro',serif;}
-    #interim-bar.visible{min-height:24px;padding:6px 28px;border-bottom:1px solid var(--border);background:var(--bg-panel);}
+    #status-bar{min-height:0;overflow:hidden;transition:all 0.2s;font-size:13px;color:var(--text-dim);font-style:italic;padding:0 28px;font-family:'Crimson Pro',serif;}
+    #status-bar.visible{min-height:24px;padding:6px 28px;border-bottom:1px solid var(--border);background:var(--bg-panel);}
   </style>
 </head>
 <body>
@@ -92,21 +92,21 @@
     <label>Juego:</label>
     <input id="game-context-input" type="text" placeholder="¿Qué estás jugando? (ej: Kingdom Come Deliverance 2...)"/>
   </div>
-  <div id="interim-bar"></div>
+  <div id="status-bar"></div>
   <div id="messages">
     <div class="welcome" id="welcome-msg">
       <div class="rune">🏰</div>
       <h2>Compañero listo</h2>
-      <p>Escribí o tocá el micrófono para hablar. El micrófono queda abierto como una llamada hasta que lo apagues.</p>
+      <p>Escribí o tocá 🎤 para hablar. El micrófono graba mientras lo tenés activo — cuando lo apagás, manda el audio.</p>
     </div>
   </div>
   <div id="input-area">
     <div id="input-row">
-      <button id="mic-btn" title="Click para activar/desactivar micrófono">🎤</button>
+      <button id="mic-btn" title="Click para grabar, click de nuevo para enviar">🎤</button>
       <textarea id="user-input" rows="1" placeholder="Contame qué está pasando en el juego..."></textarea>
       <button id="send-btn" title="Enviar (Enter)">➤</button>
     </div>
-    <div class="input-hint">🎤 Click para llamada de voz · ENTER para enviar texto</div>
+    <div class="input-hint">🎤 Click para grabar · Click de nuevo para enviar · ENTER para texto</div>
   </div>
 </div>
 
@@ -119,79 +119,98 @@
   const statusText = document.getElementById('status-text');
   const gameCtx    = document.getElementById('game-context-input');
   const voiceOn    = document.getElementById('voice-on');
-  const interimBar = document.getElementById('interim-bar');
+  const statusBar  = document.getElementById('status-bar');
 
-  let history    = [];
-  let isThinking = false;
-  let callActive = false;
-  let isSpeaking = false;
-  let recognition = null;
+  let history     = [];
+  let isThinking  = false;
+  let isSpeaking  = false;
+  let isRecording = false;
+  let mediaRecorder = null;
+  let audioChunks = [];
 
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    micBtn.disabled = true;
-    micBtn.title = 'Tu navegador no soporta voz. Usá Chrome.';
-  } else {
-    setupRecognition();
-  }
-
-  function setupRecognition() {
-    recognition = new SR();
-    recognition.lang = 'es-ES';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onresult = (e) => {
-      const transcript = e.results[e.results.length - 1][0].transcript.trim();
-      interimBar.textContent = '';
-      interimBar.classList.remove('visible');
-      if (transcript) sendVoiceMessage(transcript);
-    };
-
-    recognition.onerror = (e) => {
-      if (e.error === 'no-speech' && callActive && !isThinking) {
-        setTimeout(() => { try { recognition.start(); } catch(err) {} }, 200);
-      }
-    };
-
-    recognition.onend = () => {
-      if (callActive && !isThinking && !isSpeaking) {
-        setTimeout(() => { try { recognition.start(); } catch(err) {} }, 200);
-      }
-    };
-  }
-
-  micBtn.addEventListener('click', () => {
-    if (!SR) return;
-    if (callActive) endCall();
-    else startCall();
+  // ── Mic button: click to start, click again to stop & send ──
+  micBtn.addEventListener('click', async () => {
+    if (isThinking || isSpeaking) return;
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
   });
 
-  function startCall() {
-    callActive = true;
-    micBtn.classList.add('active');
-    micBtn.textContent = '📵';
-    micBtn.title = 'Click para colgar';
-    statusDot.className = 'dot recording';
-    statusText.textContent = 'ESCUCHANDO...';
-    try { recognition.start(); } catch(e) {}
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        await transcribeAndSend(blob);
+      };
+      mediaRecorder.start();
+      isRecording = true;
+      micBtn.classList.add('active');
+      micBtn.textContent = '⏹';
+      micBtn.title = 'Click para enviar';
+      statusDot.className = 'dot recording';
+      statusText.textContent = 'GRABANDO...';
+      setStatusBar('🎙 Grabando... click en ⏹ para enviar');
+    } catch (err) {
+      setStatusBar('❌ No se pudo acceder al micrófono: ' + err.message);
+    }
   }
 
-  function endCall() {
-    callActive = false;
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    isRecording = false;
     micBtn.classList.remove('active');
     micBtn.textContent = '🎤';
-    micBtn.title = 'Click para activar micrófono';
-    interimBar.textContent = '';
-    interimBar.classList.remove('visible');
-    if (!isThinking) {
-      statusDot.className = 'dot';
-      statusText.textContent = 'EN LÍNEA';
-    }
-    try { recognition.stop(); } catch(e) {}
-    window.speechSynthesis.cancel();
+    micBtn.title = 'Click para grabar';
+    statusDot.className = 'dot thinking';
+    statusText.textContent = 'TRANSCRIBIENDO...';
+    setStatusBar('⏳ Transcribiendo con Whisper...');
   }
 
+  async function transcribeAndSend(blob) {
+    try {
+      const formData = new FormData();
+      formData.append('file', blob, 'audio.webm');
+
+      const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        setStatusBar('❌ Error al transcribir: ' + data.error);
+        resetStatus();
+        return;
+      }
+
+      const transcript = data.transcript?.trim();
+      if (!transcript) {
+        setStatusBar('⚠️ No se escuchó nada, intentá de nuevo');
+        resetStatus();
+        return;
+      }
+
+      clearStatusBar();
+      await processMessage(transcript);
+
+    } catch (err) {
+      setStatusBar('❌ Error: ' + err.message);
+      resetStatus();
+    }
+  }
+
+  // ── Text to Speech ──
   function speak(text, onEnd) {
     if (!voiceOn.checked) { if (onEnd) onEnd(); return; }
     window.speechSynthesis.cancel();
@@ -203,29 +222,15 @@
     const esVoice = voices.find(v => v.lang.startsWith('es'));
     if (esVoice) utter.voice = esVoice;
     isSpeaking = true;
-    if (callActive) try { recognition.stop(); } catch(e) {}
     utter.onend = () => {
       isSpeaking = false;
       if (onEnd) onEnd();
-      if (callActive) {
-        statusDot.className = 'dot recording';
-        statusText.textContent = 'ESCUCHANDO...';
-        setTimeout(() => { try { recognition.start(); } catch(e) {} }, 300);
-      }
     };
     window.speechSynthesis.speak(utter);
   }
-
   window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
-  async function sendVoiceMessage(text) {
-    if (isThinking || !text) return;
-    try { recognition.stop(); } catch(e) {}
-    statusDot.className = 'dot thinking';
-    statusText.textContent = 'PENSANDO...';
-    await processMessage(text);
-  }
-
+  // ── Text input ──
   userInput.addEventListener('input', () => {
     userInput.style.height = 'auto';
     userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
@@ -243,13 +248,18 @@
     processMessage(text);
   }
 
+  // ── Core ──
   async function processMessage(text) {
     if (isThinking) return;
     isThinking = true;
     sendBtn.disabled = true;
+    micBtn.disabled = true;
     appendMessage('user', text);
     history.push({ role: 'user', content: text });
     showTyping();
+    statusDot.className = 'dot thinking';
+    statusText.textContent = 'PENSANDO...';
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -277,15 +287,29 @@
   function finishThinking() {
     isThinking = false;
     sendBtn.disabled = false;
-    if (callActive) {
-      statusDot.className = 'dot recording';
-      statusText.textContent = 'ESCUCHANDO...';
-    } else {
-      statusDot.className = 'dot';
-      statusText.textContent = 'EN LÍNEA';
-    }
+    micBtn.disabled = false;
+    statusDot.className = 'dot';
+    statusText.textContent = 'EN LÍNEA';
   }
 
+  function resetStatus() {
+    setTimeout(() => {
+      clearStatusBar();
+      finishThinking();
+    }, 3000);
+  }
+
+  function setStatusBar(msg) {
+    statusBar.textContent = msg;
+    statusBar.classList.add('visible');
+  }
+
+  function clearStatusBar() {
+    statusBar.textContent = '';
+    statusBar.classList.remove('visible');
+  }
+
+  // ── UI helpers ──
   function appendMessage(role, text) {
     const welcome = document.getElementById('welcome-msg');
     if (welcome) welcome.remove();
