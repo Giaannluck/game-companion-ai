@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   const body = buffer.toString('binary');
   const parts = body.split('--' + boundary);
   let audioBuffer = null;
-  let filename = 'audio.wav';
+  let filename = 'audio.webm';
 
   for (const part of parts) {
     if (part.includes('Content-Disposition') && part.includes('filename')) {
@@ -28,16 +28,19 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!audioBuffer) return res.status(400).json({ error: 'No audio data' });
+  if (!audioBuffer || audioBuffer.length < 1000) {
+    return res.status(400).json({ error: 'Audio demasiado corto o vacío' });
+  }
 
   try {
     const formData = new FormData();
-    const blob = new Blob([audioBuffer], { type: 'audio/wav' });
-    formData.append('file', blob, 'audio.wav');
+    // Mandar siempre como webm — es lo que Brave realmente graba
+    const blob = new Blob([audioBuffer], { type: 'audio/webm' });
+    formData.append('file', blob, 'audio.webm');
     formData.append('model', 'whisper-large-v3-turbo');
     formData.append('language', 'es');
-    formData.append('response_format', 'json');
-    formData.append('prompt', 'Transcripción en español argentino de una conversación casual sobre videojuegos.');
+    formData.append('response_format', 'verbose_json');
+    formData.append('prompt', 'Conversación en español sobre videojuegos.');
 
     const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST',
@@ -47,7 +50,19 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     if (!response.ok) return res.status(500).json({ error: data.error?.message || 'Error Whisper' });
-    return res.status(200).json({ transcript: data.text });
+    
+    // verbose_json devuelve más info — filtrar transcripciones de baja confianza
+    const text = data.text?.trim();
+    if (!text) return res.status(200).json({ transcript: '' });
+    
+    // Ignorar alucinaciones comunes de Whisper
+    const hallucinations = ['gracias', 'subtítulos', 'suscríbete', 'hasta la próxima'];
+    const lower = text.toLowerCase();
+    if (hallucinations.some(h => lower === h || lower === h + '.')) {
+      return res.status(200).json({ transcript: '' });
+    }
+
+    return res.status(200).json({ transcript: text });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
