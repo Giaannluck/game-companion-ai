@@ -172,21 +172,41 @@
   function setupRecognition() {
     recognition = new SR();
     recognition.lang = 'es-AR';
-    recognition.continuous = true;       // escucha indefinida
-    recognition.interimResults = true;   // muestra texto mientras hablás
+    recognition.continuous = false;
+    recognition.interimResults = true;
 
     recognition.onresult = (e) => {
       let interim = '';
       let final   = '';
-
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          final += e.results[i][0].transcript;
-        } else {
-          interim += e.results[i][0].transcript;
-        }
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
       }
+      if (interim) {
+        interimBar.textContent = '🎙 ' + interim;
+        interimBar.classList.add('visible');
+      }
+      if (final.trim()) {
+        interimBar.textContent = '';
+        interimBar.classList.remove('visible');
+        sendVoiceMessage(final.trim());
+      }
+    };
 
+    recognition.onerror = (e) => {
+      if (e.error === 'no-speech' && callActive && !isThinking) {
+        try { recognition.start(); } catch(e) {}
+      }
+    };
+
+    recognition.onend = () => {
+      if (callActive && !isThinking && !isSpeaking) {
+        setTimeout(() => {
+          try { recognition.start(); } catch(e) {}
+        }, 200);
+      }
+    };
+  }
       // Mostrar texto interim en la barra
       if (interim) {
         interimBar.textContent = '🎙 ' + interim;
