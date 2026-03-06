@@ -262,7 +262,8 @@
         body: JSON.stringify({
           messages: [{ role: 'user', content: 'Mirá esta captura del juego. Respondé SOLO si ves algo realmente notable: un enemigo cerca, una misión activa, un item valioso, una cinemática, peligro inminente, o algo curioso del lore. Variá cómo arrancás cada comentario, nunca repitas la misma frase de apertura. Si no hay nada especial, respondé únicamente la palabra SILENCIO y nada más.' }],
           gameContext: gameCtx.value.trim() || null,
-          imageBase64: imageB64
+          imageBase64: imageB64,
+          isProactive: true
         })
       });
       const data = await res.json();
@@ -275,7 +276,9 @@
       if (voiceOn.checked) {
         isSpeaking = true;
         setStatus('thinking', 'HABLANDO...');
-        speak(msg, () => {
+        // Limitar respuesta proactiva a 200 chars para ahorrar creditos ElevenLabs
+        const msgTTS = msg.length > 200 ? msg.slice(0, msg.lastIndexOf(' ', 200)) + '...' : msg;
+        speak(msgTTS, () => {
           isSpeaking = false;
           if (callActive) { setStatus('listening', 'ESCUCHANDO...'); setStatusBar('🎙 Escuchando...'); }
         });
@@ -577,7 +580,7 @@
         body: JSON.stringify({
           messages: history,
           gameContext: gameCtx.value.trim() || null,
-          imageBase64: screenActive ? lastScreenB64 : null
+          imageBase64: null
         })
       });
       const data = await res.json();
@@ -592,7 +595,8 @@
         if (voiceOn.checked) {
           isSpeaking = true;
           setStatus('thinking', 'HABLANDO...');
-          speak(data.message, () => {
+          const textToSpeak = data.message.length > 300 ? data.message.slice(0, 297) + '...' : data.message;
+          speak(textToSpeak, () => {
             isSpeaking = false;
             isThinking = false; sendBtn.disabled = false;
             resetToListening();
